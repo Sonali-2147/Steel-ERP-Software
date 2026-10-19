@@ -304,7 +304,7 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
   const [note, setNote] = useState(invoice?.note || '')
   const [tax, setTax] = useState(invoice?.tax || 0)
   const [discount, setDiscount] = useState(invoice?.discount || 0)
-  const [lines, setLines] = useState<SalesInvoiceLine[]>(
+  const [lines, setLines] = useState<Array<{ item_id: number; qty: number; rate: number; amount: number }>>(
     invoice?.lines?.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate, amount: l.amount })) || [{ item_id: 0, qty: 0, rate: 0, amount: 0 }]
   )
 
