@@ -9,6 +9,7 @@ import { fmtDate, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { SalesInvoice, SalesInvoiceInput, SalesInvoiceLine } from '@/lib/types'
 
+
 export default function SalesInvoices() {
   const { customers, items, notify, refresh } = useStore()
   const [params, setParams] = useSearchParams()
