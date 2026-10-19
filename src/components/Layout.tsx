@@ -87,7 +87,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Boxes size={20} />
         </div>
         <div className="leading-tight">
-          <div className="text-base font-bold text-white">Steel ERP</div>
+          <div className="text-base font-bold text-white">Krishna Steel Center</div>
           <div className="text-xs text-slate-400">Stock Management</div>
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function Layout() {
           <button onClick={() => setMobileOpen(true)} className="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100" aria-label="Open menu">
             <Menu size={20} />
           </button>
-          <span className="font-semibold text-slate-800">Steel ERP</span>
+          <span className="font-semibold text-slate-800">Krishna Steel Center</span>
         </header>
 
         {!connected && (

@@ -1,6 +1,6 @@
-# Steel ERP – Stock Management
+# Krishna Steel Center – Stock Management
 
-A simple stock management app: maintain items, record stock in / stock out, keep suppliers and customers, and view reports.
+A simple stock management app for Krishna Steel Center: maintain items, record stock in / stock out, keep suppliers and customers, and view reports.
 
 ## Modules
 

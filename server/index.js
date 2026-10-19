@@ -516,5 +516,5 @@ if (fs.existsSync(distDir)) {
 }
 
 app.listen(PORT, () => {
-  console.log(`Steel ERP running at http://localhost:${PORT}`)
+  console.log(`Krishna Steel Center running at http://localhost:${PORT}`)
 })

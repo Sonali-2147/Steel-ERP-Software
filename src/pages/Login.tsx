@@ -42,7 +42,7 @@ export default function Login() {
         <div className="group flex w-fit items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-accent-500 shadow-lg shadow-accent-500/30 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110"><Boxes size={24} /></div>
           <div>
-            <div className="text-xl font-bold">Steel ERP</div>
+            <div className="text-xl font-bold">Krishna Steel Center</div>
             <div className="text-sm text-slate-300">Stock Management</div>
           </div>
         </div>
@@ -57,7 +57,7 @@ export default function Login() {
             ))}
           </ul>
         </div>
-        <div className="text-xs text-slate-400">© {YEAR} Steel ERP</div>
+        <div className="text-xs text-slate-400">© {YEAR} Krishna Steel Center</div>
       </div>
 
       <div className="relative flex w-full items-center justify-center p-6 lg:w-[480px] lg:bg-white lg:p-12 lg:shadow-2xl xl:w-[540px]">
@@ -65,7 +65,7 @@ export default function Login() {
           <div className="mb-8 flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-xl bg-accent-500 text-white"><Boxes size={22} /></div>
             <div className="leading-tight">
-              <div className="text-lg font-bold text-slate-900">Steel ERP</div>
+              <div className="text-lg font-bold text-slate-900">Krishna Steel Center</div>
               <div className="text-xs text-slate-500">Stock Management</div>
             </div>
           </div>
