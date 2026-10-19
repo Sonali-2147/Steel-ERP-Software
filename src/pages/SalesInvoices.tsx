@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, FileText, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
@@ -14,6 +14,7 @@ export default function SalesInvoices() {
   const [params, setParams] = useSearchParams()
 
   const [invoices, setInvoices] = useState<SalesInvoice[]>([])
+  const [invoiceDetails, setInvoiceDetails] = useState<Map<number, SalesInvoice>>(new Map())
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -29,6 +30,15 @@ export default function SalesInvoices() {
       .catch((e) => notify(e.message, 'error'))
   }, [from, to, customerId, notify])
 
+  const loadInvoiceDetails = useCallback(async (invoiceId: number) => {
+    try {
+      const invoice = await api.getSalesInvoice(invoiceId)
+      setInvoiceDetails(prev => new Map(prev).set(invoiceId, invoice))
+    } catch (e) {
+      notify((e as Error).message, 'error')
+    }
+  }, [notify])
+
   useEffect(() => {
     const t = setTimeout(load, 200)
     return () => clearTimeout(t)
@@ -41,6 +51,93 @@ export default function SalesInvoices() {
       setParams({}, { replace: true })
     }
   }, [params, setParams])
+
+  const handleExpand = async (invoiceId: number) => {
+    const newExpanded = expanded === invoiceId ? null : invoiceId
+    setExpanded(newExpanded)
+    if (newExpanded && !invoiceDetails.has(invoiceId)) {
+      await loadInvoiceDetails(invoiceId)
+    }
+  }
+
+  const printInvoice = (invoice: SalesInvoice) => {
+    const fullInvoice = invoiceDetails.get(invoice.id) || invoice
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Sales Invoice - ${invoice.invoice_no}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size: 24px; }
+          .header h2 { margin: 5px 0; font-size: 16px; color: #666; }
+          .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
+          .info div { width: 45%; }
+          .info label { font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f5f5f5; }
+          .totals { text-align: right; margin-top: 20px; }
+          .totals div { margin: 5px 0; }
+          .totals .grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Krishna Steel Center</h1>
+          <h2>Sales Invoice</h2>
+        </div>
+        <div class="info">
+          <div>
+            <label>Invoice No:</label> ${invoice.invoice_no}<br>
+            <label>Date:</label> ${fmtDate(invoice.date)}<br>
+            <label>Reference:</label> ${invoice.reference || '-'}
+          </div>
+          <div>
+            <label>Customer:</label> ${invoice.customer_name || '-'}<br>
+            ${invoice.contact_person ? `<label>Contact:</label> ${invoice.contact_person}<br>` : ''}
+            ${invoice.phone ? `<label>Phone:</label> ${invoice.phone}<br>` : ''}
+            ${invoice.gstin ? `<label>GSTIN:</label> ${invoice.gstin}<br>` : ''}
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Code</th>
+              <th style="text-align: right">Qty</th>
+              <th style="text-align: right">Rate</th>
+              <th style="text-align: right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(fullInvoice.lines || []).map(l => `
+              <tr>
+                <td>${l.name}</td>
+                <td>${l.code}</td>
+                <td style="text-align: right">${qty(l.qty)} ${l.unit}</td>
+                <td style="text-align: right">${inr(l.rate)}</td>
+                <td style="text-align: right">${inr(l.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: ${inr(invoice.subtotal)}</div>
+          ${invoice.tax > 0 ? `<div>Tax: ${inr(invoice.tax)}</div>` : ''}
+          ${invoice.discount > 0 ? `<div>Discount: -${inr(invoice.discount)}</div>` : ''}
+          <div class="grand-total">Total: ${inr(invoice.total)}</div>
+        </div>
+        ${invoice.note ? `<div style="margin-top: 20px;"><label>Note:</label> ${invoice.note}</div>` : ''}
+        <script>window.print();</script>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
 
   const remove = async (inv: SalesInvoice) => {
     setConfirmDelete(inv)
@@ -99,19 +196,24 @@ export default function SalesInvoices() {
           <tbody>
             {invoices.length === 0 ? (
               <EmptyRow cols={9} text="No sales invoices found" />
-            ) : invoices.map((inv) => (
+            ) : invoices.map((inv) => {
+              const fullInvoice = invoiceDetails.get(inv.id) || inv
+              return (
               <Fragment key={inv.id}>
-                <Tr onClick={() => setExpanded(expanded === inv.id ? null : inv.id)} className="cursor-pointer hover:bg-slate-50">
+                <Tr onClick={() => handleExpand(inv.id)} className="cursor-pointer hover:bg-slate-50">
                   <Td><ChevronRight size={16} className={cx('transition-transform', expanded === inv.id && 'rotate-90')} /></Td>
                   <Td>{fmtDate(inv.date)}</Td>
                   <Td><Badge>{inv.invoice_no}</Badge></Td>
                   <Td>{inv.customer_name}</Td>
                   <Td>{inv.reference || '-'}</Td>
-                  <Td>{inv.lines?.length || 0} items</Td>
+                  <Td>{fullInvoice.lines?.length || 0} items</Td>
                   <Td right>{inr(inv.subtotal)}</Td>
                   <Td right className="font-semibold">{inr(inv.total)}</Td>
                   <Td right>
                     <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); printInvoice(inv) }}>
+                        <Printer size={14} />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(inv); setFormOpen(true) }}>
                         <FileText size={14} />
                       </Button>
@@ -121,7 +223,7 @@ export default function SalesInvoices() {
                     </div>
                   </Td>
                 </Tr>
-                {expanded === inv.id && inv.lines && (
+                {expanded === inv.id && fullInvoice.lines && (
                   <tr className="bg-slate-50">
                     <td colSpan={9} className="p-4">
                       <table className="w-full text-sm">
@@ -134,7 +236,7 @@ export default function SalesInvoices() {
                           </tr>
                         </thead>
                         <tbody>
-                          {inv.lines.map((l, i) => (
+                          {fullInvoice.lines.map((l, i) => (
                             <tr key={i} className="border-t border-slate-100">
                               <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
                               <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>
@@ -164,7 +266,8 @@ export default function SalesInvoices() {
                   </tr>
                 )}
               </Fragment>
-            ))}
+              )
+            })}
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
@@ -259,7 +362,7 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
   }
 
   return (
-    <Modal open onClose={onClose} title={invoice ? 'Edit Sales Invoice' : 'New Sales Invoice'} blur>
+    <Modal open onClose={onClose} title={invoice ? 'Edit Sales Invoice' : 'New Sales Invoice'} wide blur>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Invoice No">

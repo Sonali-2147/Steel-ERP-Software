@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, Boxes, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Receipt, Truck, Users, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Quote, Receipt, Truck, Users, X,
 } from 'lucide-react'
 import { Button, cx, Field, Input, Modal, Toaster } from './ui'
 import { api } from '@/lib/api'
@@ -13,6 +13,7 @@ const NAV = [
   { to: '/items', label: 'Items', icon: Package },
   { to: '/stock-in', label: 'Stock In', icon: ArrowDownToLine },
   { to: '/stock-out', label: 'Stock Out', icon: ArrowUpFromLine },
+  { to: '/quotations', label: 'Quotations', icon: Quote },
   { to: '/purchase-bills', label: 'Purchase Bills', icon: Receipt },
   { to: '/sales-invoices', label: 'Sales Invoices', icon: FileText },
   { to: '/suppliers', label: 'Suppliers', icon: Truck },
@@ -86,7 +87,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
     <aside className="flex h-full w-60 flex-col bg-navy-900 text-slate-300 print:hidden">
       <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
         <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent-500 text-white">
-          <Boxes size={20} />
+          <Package size={20} />
         </div>
         <div className="leading-tight">
           <div className="text-base font-bold text-white">Krishna Steel Center</div>

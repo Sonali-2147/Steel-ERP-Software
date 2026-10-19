@@ -89,6 +89,12 @@ function nextInvoiceNo() {
   return `INV-${String(max + 1).padStart(4, '0')}`
 }
 
+function nextQuotationNo() {
+  const rows = db.prepare("SELECT quotation_no FROM quotations WHERE quotation_no LIKE 'QT-%'").all()
+  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.quotation_no.slice(3), 10) || 0), 0)
+  return `QT-${String(max + 1).padStart(4, '0')}`
+}
+
 // ------------------------------------------------------------------
 // Health
 // ------------------------------------------------------------------
@@ -663,6 +669,113 @@ app.delete('/api/sales-invoices/:id', route((req) => {
   const invoice = db.prepare('SELECT id FROM sales_invoices WHERE id = ?').get(Number(req.params.id))
   if (!invoice) throw new HttpError(404, 'Sales invoice not found')
   db.prepare('DELETE FROM sales_invoices WHERE id = ?').run(invoice.id)
+  return { success: true }
+}))
+
+// ------------------------------------------------------------------
+// Billing Reports
+// ------------------------------------------------------------------
+
+app.get('/api/reports/purchase-register', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('b.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('b.date <= ?'); params.push(req.query.to) }
+  if (req.query.supplier_id) { cond.push('b.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
+  return db.prepare(`
+    SELECT b.bill_no, b.date, p.name AS supplier_name, b.reference, b.subtotal, b.tax, b.discount, b.total
+    FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY b.date DESC, b.id DESC
+  `).all(...params)
+}))
+
+app.get('/api/reports/sales-register', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('i.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('i.date <= ?'); params.push(req.query.to) }
+  if (req.query.customer_id) { cond.push('i.customer_id = ?'); params.push(Number(req.query.customer_id)) }
+  return db.prepare(`
+    SELECT i.invoice_no, i.date, p.name AS customer_name, i.reference, i.subtotal, i.tax, i.discount, i.total
+    FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY i.date DESC, i.id DESC
+  `).all(...params)
+}))
+
+// ------------------------------------------------------------------
+// Quotations
+// ------------------------------------------------------------------
+
+app.get('/api/quotations', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('q.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('q.date <= ?'); params.push(req.query.to) }
+  if (req.query.supplier_id) { cond.push('q.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
+  if (req.query.status) { cond.push('q.status = ?'); params.push(req.query.status) }
+  return db.prepare(`
+    SELECT q.*, p.name AS supplier_name
+    FROM quotations q LEFT JOIN parties p ON p.id = q.supplier_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY q.date DESC, q.id DESC
+  `).all(...params)
+}))
+
+app.get('/api/quotations/:id', route((req) => {
+  const quotation = db.prepare(`
+    SELECT q.*, p.name AS supplier_name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin
+    FROM quotations q LEFT JOIN parties p ON p.id = q.supplier_id
+    WHERE q.id = ?
+  `).get(Number(req.params.id))
+  if (!quotation) throw new HttpError(404, 'Quotation not found')
+  const lines = db.prepare(`
+    SELECT l.*, i.code, i.name, i.unit
+    FROM quotation_lines l JOIN items i ON i.id = l.item_id
+    WHERE l.quotation_id = ?
+    ORDER BY l.id
+  `).all(quotation.id)
+  return { ...quotation, lines }
+}))
+
+app.post('/api/quotations', route((req) => {
+  const body = req.body
+  const supplier = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.supplier_id), 'supplier')
+  if (!supplier) throw new HttpError(400, 'Invalid supplier')
+  if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
+    throw new HttpError(400, 'At least one item is required')
+  }
+
+  return transaction(() => {
+    const quotationNo = body.quotation_no || nextQuotationNo()
+    const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
+    const tax = num(body.tax)
+    const discount = num(body.discount)
+    const total = subtotal + tax - discount
+
+    const info = db.prepare(`
+      INSERT INTO quotations (quotation_no, date, supplier_id, reference, note, subtotal, tax, discount, total, valid_until, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(quotationNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, total, str(body.valid_until) || '', str(body.status) || 'pending')
+
+    const insertLine = db.prepare(`
+      INSERT INTO quotation_lines (quotation_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const line of body.lines) {
+      const amount = num(line.qty) * num(line.rate)
+      insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
+    }
+
+    return { id: info.lastInsertRowid, quotation_no: quotationNo }
+  })
+}))
+
+app.delete('/api/quotations/:id', route((req) => {
+  const quotation = db.prepare('SELECT id FROM quotations WHERE id = ?').get(Number(req.params.id))
+  if (!quotation) throw new HttpError(404, 'Quotation not found')
+  db.prepare('DELETE FROM quotations WHERE id = ?').run(quotation.id)
   return { success: true }
 }))
 

@@ -71,11 +71,19 @@ const LIST = [
     'GP Pipe 1.5x1.5 - 14kg', 'GP Pipe 1.5x1.5 - 12kg', 'GP Pipe 1.5x1.5 - 9kg',
     'GP Pipe 1x1 - 7kg', 'GP Pipe 1x1 - 6kg', 'GP Pipe 4x4 - 38kg',
   ]],
+  ['JWP', 'JSW Patra', [
+    'JSW Patra 20×4×0.50mm', 'JSW Patra 18×4×0.50mm', 'JSW Patra 16×4×0.50mm', 'JSW Patra 14×4×0.50mm',
+    'JSW Patra 12×4×0.50mm', 'JSW Patra 10×4×0.50mm',
+    'JSW Patra 20×4×0.45mm', 'JSW Patra 18×4×0.45mm', 'JSW Patra 16×4×0.45mm', 'JSW Patra 14×4×0.45mm',
+    'JSW Patra 12×4×0.45mm', 'JSW Patra 10×4×0.45mm',
+    'JSW Patra 16×4×0.40mm', 'JSW Patra 14×4×0.40mm', 'JSW Patra 12×4×0.40mm', 'JSW Patra 10×4×0.40mm',
+    'JSW Patra 16×4×0.35mm', 'JSW Patra 14×4×0.35mm', 'JSW Patra 12×4×0.35mm', 'JSW Patra 10×4×0.35mm',
+  ]],
 ]
 
 export const clientItems = LIST.flatMap(([prefix, category, names]) =>
   names.map((name, idx) => {
-    const size = name.replace(/^(Semi Pipe|MS Angle|Panjab Angle|Channel|I Beam|Square Bar|Round Bar|Flat|TMT Steel|Apollo Pipe|GP Pipe)\s*/i, '').replace(/\s*-\s*[\d.]+kg$/i, '').trim()
+    const size = name.replace(/^(Semi Pipe|MS Angle|Panjab Angle|Channel|I Beam|Square Bar|Round Bar|Flat|TMT Steel|Apollo Pipe|GP Pipe|JSW Patra)\s*/i, '').replace(/\s*-\s*[\d.]+kg$/i, '').trim()
     return { code: `${prefix}-${String(idx + 1).padStart(3, '0')}`, name, category, size: size === name ? '' : size, unit: 'kg' }
   }),
 )

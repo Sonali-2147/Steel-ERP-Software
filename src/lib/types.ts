@@ -184,14 +184,14 @@ export interface PurchaseBillInput {
 }
 
 export interface SalesInvoiceLine {
-  id?: number
-  invoice_id?: number
+  id: number
+  invoice_id: number
   item_id: number
   qty: number
   rate: number
   amount: number
-  code?: string
   name?: string
+  code?: string
   unit?: string
 }
 
@@ -225,6 +225,55 @@ export interface SalesInvoiceInput {
   note: string
   tax: number
   discount: number
+  lines: { item_id: number; qty: number; rate: number }[]
+}
+
+export interface Quotation {
+  id: number
+  quotation_no: string
+  date: string
+  supplier_id: number
+  supplier_name?: string
+  contact_person?: string
+  phone?: string
+  email?: string
+  address?: string
+  city?: string
+  gstin?: string
+  reference: string
+  note: string
+  subtotal: number
+  tax: number
+  discount: number
+  total: number
+  valid_until: string
+  status: 'pending' | 'accepted' | 'rejected' | 'expired'
+  created_at: string
+  lines?: QuotationLine[]
+}
+
+export interface QuotationLine {
+  id: number
+  quotation_id: number
+  item_id: number
+  qty: number
+  rate: number
+  amount: number
+  name?: string
+  code?: string
+  unit?: string
+}
+
+export interface QuotationInput {
+  quotation_no?: string
+  date: string
+  supplier_id: number
+  reference?: string
+  note?: string
+  tax?: number
+  discount?: number
+  valid_until?: string
+  status?: string
   lines: { item_id: number; qty: number; rate: number }[]
 }
 

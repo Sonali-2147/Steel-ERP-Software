@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, FileText, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
@@ -14,6 +14,7 @@ export default function PurchaseBills() {
   const [params, setParams] = useSearchParams()
 
   const [bills, setBills] = useState<PurchaseBill[]>([])
+  const [billDetails, setBillDetails] = useState<Map<number, PurchaseBill>>(new Map())
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -29,6 +30,15 @@ export default function PurchaseBills() {
       .catch((e) => notify(e.message, 'error'))
   }, [from, to, supplierId, notify])
 
+  const loadBillDetails = useCallback(async (billId: number) => {
+    try {
+      const bill = await api.getPurchaseBill(billId)
+      setBillDetails(prev => new Map(prev).set(billId, bill))
+    } catch (e) {
+      notify((e as Error).message, 'error')
+    }
+  }, [notify])
+
   useEffect(() => {
     const t = setTimeout(load, 200)
     return () => clearTimeout(t)
@@ -41,6 +51,93 @@ export default function PurchaseBills() {
       setParams({}, { replace: true })
     }
   }, [params, setParams])
+
+  const handleExpand = async (billId: number) => {
+    const newExpanded = expanded === billId ? null : billId
+    setExpanded(newExpanded)
+    if (newExpanded && !billDetails.has(billId)) {
+      await loadBillDetails(billId)
+    }
+  }
+
+  const printBill = (bill: PurchaseBill) => {
+    const fullBill = billDetails.get(bill.id) || bill
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    printWindow.document.write(`
+      <html>
+      <head>
+        <title>Purchase Bill - ${bill.bill_no}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size: 24px; }
+          .header h2 { margin: 5px 0; font-size: 16px; color: #666; }
+          .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
+          .info div { width: 45%; }
+          .info label { font-weight: bold; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background: #f5f5f5; }
+          .totals { text-align: right; margin-top: 20px; }
+          .totals div { margin: 5px 0; }
+          .totals .grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Krishna Steel Center</h1>
+          <h2>Purchase Bill</h2>
+        </div>
+        <div class="info">
+          <div>
+            <label>Bill No:</label> ${bill.bill_no}<br>
+            <label>Date:</label> ${fmtDate(bill.date)}<br>
+            <label>Reference:</label> ${bill.reference || '-'}
+          </div>
+          <div>
+            <label>Supplier:</label> ${bill.supplier_name || '-'}<br>
+            ${bill.contact_person ? `<label>Contact:</label> ${bill.contact_person}<br>` : ''}
+            ${bill.phone ? `<label>Phone:</label> ${bill.phone}<br>` : ''}
+            ${bill.gstin ? `<label>GSTIN:</label> ${bill.gstin}<br>` : ''}
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Code</th>
+              <th style="text-align: right">Qty</th>
+              <th style="text-align: right">Rate</th>
+              <th style="text-align: right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(fullBill.lines || []).map(l => `
+              <tr>
+                <td>${l.name}</td>
+                <td>${l.code}</td>
+                <td style="text-align: right">${qty(l.qty)} ${l.unit}</td>
+                <td style="text-align: right">${inr(l.rate)}</td>
+                <td style="text-align: right">${inr(l.amount)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div class="totals">
+          <div>Subtotal: ${inr(bill.subtotal)}</div>
+          ${bill.tax > 0 ? `<div>Tax: ${inr(bill.tax)}</div>` : ''}
+          ${bill.discount > 0 ? `<div>Discount: -${inr(bill.discount)}</div>` : ''}
+          <div class="grand-total">Total: ${inr(bill.total)}</div>
+        </div>
+        ${bill.note ? `<div style="margin-top: 20px;"><label>Note:</label> ${bill.note}</div>` : ''}
+        <script>window.print();</script>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
 
   const remove = async (b: PurchaseBill) => {
     setConfirmDelete(b)
@@ -99,19 +196,24 @@ export default function PurchaseBills() {
           <tbody>
             {bills.length === 0 ? (
               <EmptyRow cols={9} text="No purchase bills found" />
-            ) : bills.map((b) => (
+            ) : bills.map((b) => {
+              const fullBill = billDetails.get(b.id) || b
+              return (
               <Fragment key={b.id}>
-                <Tr onClick={() => setExpanded(expanded === b.id ? null : b.id)} className="cursor-pointer hover:bg-slate-50">
+                <Tr onClick={() => handleExpand(b.id)} className="cursor-pointer hover:bg-slate-50">
                   <Td><ChevronRight size={16} className={cx('transition-transform', expanded === b.id && 'rotate-90')} /></Td>
                   <Td>{fmtDate(b.date)}</Td>
                   <Td><Badge>{b.bill_no}</Badge></Td>
                   <Td>{b.supplier_name}</Td>
                   <Td>{b.reference || '-'}</Td>
-                  <Td>{b.lines?.length || 0} items</Td>
+                  <Td>{fullBill.lines?.length || 0} items</Td>
                   <Td right>{inr(b.subtotal)}</Td>
                   <Td right className="font-semibold">{inr(b.total)}</Td>
                   <Td right>
                     <div className="flex justify-end gap-1">
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); printBill(b) }}>
+                        <Printer size={14} />
+                      </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(b); setFormOpen(true) }}>
                         <FileText size={14} />
                       </Button>
@@ -121,7 +223,7 @@ export default function PurchaseBills() {
                     </div>
                   </Td>
                 </Tr>
-                {expanded === b.id && b.lines && (
+                {expanded === b.id && fullBill.lines && (
                   <tr className="bg-slate-50">
                     <td colSpan={9} className="p-4">
                       <table className="w-full text-sm">
@@ -134,7 +236,7 @@ export default function PurchaseBills() {
                           </tr>
                         </thead>
                         <tbody>
-                          {b.lines.map((l, i) => (
+                          {fullBill.lines.map((l, i) => (
                             <tr key={i} className="border-t border-slate-100">
                               <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
                               <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>
@@ -164,7 +266,8 @@ export default function PurchaseBills() {
                   </tr>
                 )}
               </Fragment>
-            ))}
+              )
+            })}
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
@@ -259,7 +362,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   }
 
   return (
-    <Modal open onClose={onClose} title={bill ? 'Edit Purchase Bill' : 'New Purchase Bill'} blur>
+    <Modal open onClose={onClose} title={bill ? 'Edit Purchase Bill' : 'New Purchase Bill'} wide blur>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-4">
           <Field label="Bill No">

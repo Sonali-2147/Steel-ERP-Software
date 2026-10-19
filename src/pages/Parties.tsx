@@ -162,6 +162,7 @@ function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | n
       open
       onClose={onClose}
       title={party ? `Edit ${single}` : `New ${single}`}
+      wide
       blur
       footer={
         <>

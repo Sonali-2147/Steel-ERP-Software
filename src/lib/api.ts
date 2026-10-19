@@ -1,6 +1,6 @@
 import type {
   Dashboard, Entry, EntryInput, EntryType, ImportResult, Item, ItemInput, ItemLedger,
-  Party, PartyInput, PartyType, PurchaseBill, PurchaseBillInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
+  Party, PartyInput, PartyType, PurchaseBill, PurchaseBillInput, Quotation, QuotationInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
 } from './types'
 
 const TOKEN_KEY = 'erp_token'
@@ -96,4 +96,15 @@ export const api = {
   getSalesInvoice: (id: number) => request<SalesInvoice>(`/api/sales-invoices/${id}`),
   createSalesInvoice: (invoice: SalesInvoiceInput) => request<SalesInvoice>('/api/sales-invoices', send('POST', invoice)),
   deleteSalesInvoice: (id: number) => request<{ success: boolean }>(`/api/sales-invoices/${id}`, send('DELETE')),
+
+  purchaseRegister: (params?: { from?: string; to?: string; supplier_id?: number }) =>
+    request<any[]>(`/api/reports/purchase-register${qs(params || {})}`),
+  salesRegister: (params?: { from?: string; to?: string; customer_id?: number }) =>
+    request<any[]>(`/api/reports/sales-register${qs(params || {})}`),
+
+  getQuotations: (params?: { from?: string; to?: string; supplier_id?: number; status?: string }) =>
+    request<Quotation[]>(`/api/quotations${qs(params || {})}`),
+  getQuotation: (id: number) => request<Quotation>(`/api/quotations/${id}`),
+  createQuotation: (quotation: QuotationInput) => request<{ id: number; quotation_no: string }>('/api/quotations', send('POST', quotation)),
+  deleteQuotation: (id: number) => request<{ success: boolean }>(`/api/quotations/${id}`, send('DELETE')),
 }

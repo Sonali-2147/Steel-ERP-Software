@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, BookOpen, Download, FileText, IndianRupee, Layers, PackageX, Printer, Scale, Users,
+  AlertTriangle, ArrowDownToLine, ArrowUpFromLine, BookOpen, Download, FileText, IndianRupee, Layers, PackageX, Printer, Receipt, Scale, Users,
   type LucideIcon,
 } from 'lucide-react'
 import { Button, Card, cx, EmptyRow, Field, Input, PageHeader, SearchSelect, Select, StatusBadge, Table, Td, Th, Tr } from '@/components/ui'
@@ -17,10 +17,12 @@ const TABS = [
   { id: 'ledger', label: 'Item Ledger', desc: 'Full history of one item', icon: BookOpen, tone: 'violet' },
   { id: 'in', label: 'Stock In Register', desc: 'Material received', icon: ArrowDownToLine, tone: 'green' },
   { id: 'out', label: 'Stock Out Register', desc: 'Material dispatched', icon: ArrowUpFromLine, tone: 'red' },
+  { id: 'purchase', label: 'Purchase Register', desc: 'Purchase bills summary', icon: Receipt, tone: 'emerald' },
+  { id: 'sales', label: 'Sales Register', desc: 'Sales invoices summary', icon: FileText, tone: 'orange' },
   { id: 'low', label: 'Low Stock', desc: 'Items to reorder', icon: AlertTriangle, tone: 'amber' },
 ] as const
 
-type Tone = 'blue' | 'violet' | 'green' | 'red' | 'amber' | 'slate'
+type Tone = 'blue' | 'violet' | 'green' | 'red' | 'amber' | 'slate' | 'emerald' | 'orange'
 const TONES: Record<Tone, { chip: string; ring: string; text: string }> = {
   blue: { chip: 'bg-blue-100 text-blue-700', ring: 'ring-blue-500 border-blue-500', text: 'text-blue-700' },
   violet: { chip: 'bg-violet-100 text-violet-700', ring: 'ring-violet-500 border-violet-500', text: 'text-violet-700' },
@@ -28,6 +30,8 @@ const TONES: Record<Tone, { chip: string; ring: string; text: string }> = {
   red: { chip: 'bg-red-100 text-red-700', ring: 'ring-red-500 border-red-500', text: 'text-red-700' },
   amber: { chip: 'bg-amber-100 text-amber-700', ring: 'ring-amber-500 border-amber-500', text: 'text-amber-700' },
   slate: { chip: 'bg-slate-100 text-slate-700', ring: 'ring-slate-500 border-slate-500', text: 'text-slate-900' },
+  emerald: { chip: 'bg-emerald-100 text-emerald-700', ring: 'ring-emerald-500 border-emerald-500', text: 'text-emerald-700' },
+  orange: { chip: 'bg-orange-100 text-orange-700', ring: 'ring-orange-500 border-orange-500', text: 'text-orange-700' },
 }
 
 interface Kpi { label: string; value: string; icon: LucideIcon; tone: Tone; sub?: string }
@@ -74,6 +78,8 @@ export default function Reports() {
       {tab === 'ledger' && <ItemLedgerReport />}
       {tab === 'in' && <Register key="IN" type="IN" />}
       {tab === 'out' && <Register key="OUT" type="OUT" />}
+      {tab === 'purchase' && <PurchaseRegister />}
+      {tab === 'sales' && <SalesRegister />}
       {tab === 'low' && <LowStock />}
     </div>
   )
@@ -391,6 +397,146 @@ function LowStock() {
             </Tr>
           ))}
         </tbody>
+      </Table>
+    </Card>
+    </div>
+  )
+}
+
+function PurchaseRegister() {
+  const { suppliers, notify } = useStore()
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(todayISO())
+  const [supplierId, setSupplierId] = useState<number | null>(null)
+  const [rows, setRows] = useState<any[]>([])
+
+  useEffect(() => {
+    api.purchaseRegister({ from, to, supplier_id: supplierId ?? undefined })
+      .then(setRows).catch((e) => notify(e.message, 'error'))
+  }, [from, to, supplierId, notify])
+
+  const total = rows.reduce((s, r) => s + r.total, 0)
+  const billCount = rows.length
+
+  const exportCSV = () => downloadCSV(`purchase-register-${from}-to-${to}.csv`, rows.map((r) => ({
+    Date: r.date, 'Bill No': r.bill_no, Supplier: r.supplier_name || '', Reference: r.reference || '',
+    Subtotal: r.subtotal, Tax: r.tax, Discount: r.discount, Total: r.total,
+  })))
+
+  return (
+    <div className="space-y-5">
+    <Kpis items={[
+      { label: 'Bills', value: String(billCount), icon: FileText, tone: 'emerald' },
+      { label: 'Subtotal', value: inr(rows.reduce((s, r) => s + r.subtotal, 0)), icon: IndianRupee, tone: 'slate' },
+      { label: 'Tax', value: inr(rows.reduce((s, r) => s + r.tax, 0)), icon: IndianRupee, tone: 'slate' },
+      { label: 'Total', value: inr(total), icon: IndianRupee, tone: 'emerald' },
+    ]} />
+    <Card>
+      <Toolbar onExport={exportCSV}>
+        <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        <Field label="Supplier">
+          <SearchSelect className="md:w-56" placeholder="All" value={supplierId} onChange={setSupplierId}
+            options={suppliers.map((p) => ({ value: p.id, label: p.name }))} />
+        </Field>
+      </Toolbar>
+      <PrintTitle title="Purchase Register" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
+      <Table>
+        <thead>
+          <tr><Th>Date</Th><Th>Bill No</Th><Th>Supplier</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <EmptyRow cols={8} />}
+          {rows.map((r, idx) => (
+            <Tr key={idx}>
+              <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="font-medium">{r.bill_no}</Td>
+              <Td>{r.supplier_name || '–'}</Td>
+              <Td>{r.reference || '–'}</Td>
+              <Td right>{inr(r.subtotal)}</Td>
+              <Td right>{r.tax > 0 ? inr(r.tax) : '–'}</Td>
+              <Td right>{r.discount > 0 ? inr(r.discount) : '–'}</Td>
+              <Td right className="font-semibold">{inr(r.total)}</Td>
+            </Tr>
+          ))}
+        </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colSpan={7} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Total</td>
+              <td className="px-4 py-3 text-right text-sm font-semibold">{inr(total)}</td>
+            </tr>
+          </tfoot>
+        )}
+      </Table>
+    </Card>
+    </div>
+  )
+}
+
+function SalesRegister() {
+  const { customers, notify } = useStore()
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(todayISO())
+  const [customerId, setCustomerId] = useState<number | null>(null)
+  const [rows, setRows] = useState<any[]>([])
+
+  useEffect(() => {
+    api.salesRegister({ from, to, customer_id: customerId ?? undefined })
+      .then(setRows).catch((e) => notify(e.message, 'error'))
+  }, [from, to, customerId, notify])
+
+  const total = rows.reduce((s, r) => s + r.total, 0)
+  const invoiceCount = rows.length
+
+  const exportCSV = () => downloadCSV(`sales-register-${from}-to-${to}.csv`, rows.map((r) => ({
+    Date: r.date, 'Invoice No': r.invoice_no, Customer: r.customer_name || '', Reference: r.reference || '',
+    Subtotal: r.subtotal, Tax: r.tax, Discount: r.discount, Total: r.total,
+  })))
+
+  return (
+    <div className="space-y-5">
+    <Kpis items={[
+      { label: 'Invoices', value: String(invoiceCount), icon: FileText, tone: 'orange' },
+      { label: 'Subtotal', value: inr(rows.reduce((s, r) => s + r.subtotal, 0)), icon: IndianRupee, tone: 'slate' },
+      { label: 'Tax', value: inr(rows.reduce((s, r) => s + r.tax, 0)), icon: IndianRupee, tone: 'slate' },
+      { label: 'Total', value: inr(total), icon: IndianRupee, tone: 'orange' },
+    ]} />
+    <Card>
+      <Toolbar onExport={exportCSV}>
+        <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        <Field label="Customer">
+          <SearchSelect className="md:w-56" placeholder="All" value={customerId} onChange={setCustomerId}
+            options={customers.map((p) => ({ value: p.id, label: p.name }))} />
+        </Field>
+      </Toolbar>
+      <PrintTitle title="Sales Register" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
+      <Table>
+        <thead>
+          <tr><Th>Date</Th><Th>Invoice No</Th><Th>Customer</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <EmptyRow cols={8} />}
+          {rows.map((r, idx) => (
+            <Tr key={idx}>
+              <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="font-medium">{r.invoice_no}</Td>
+              <Td>{r.customer_name || '–'}</Td>
+              <Td>{r.reference || '–'}</Td>
+              <Td right>{inr(r.subtotal)}</Td>
+              <Td right>{r.tax > 0 ? inr(r.tax) : '–'}</Td>
+              <Td right>{r.discount > 0 ? inr(r.discount) : '–'}</Td>
+              <Td right className="font-semibold">{inr(r.total)}</Td>
+            </Tr>
+          ))}
+        </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colSpan={7} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Total</td>
+              <td className="px-4 py-3 text-right text-sm font-semibold">{inr(total)}</td>
+            </tr>
+          </tfoot>
+        )}
       </Table>
     </Card>
     </div>
