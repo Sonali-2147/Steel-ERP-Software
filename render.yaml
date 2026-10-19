@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: steel-erp
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ADMIN_PASSWORD
+        generateValue: true
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
