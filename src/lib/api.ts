@@ -1,6 +1,6 @@
 import type {
   Dashboard, Entry, EntryInput, EntryType, ImportResult, Item, ItemInput, ItemLedger,
-  Party, PartyInput, PartyType, RegisterRow, StockSummaryRow,
+  Party, PartyInput, PartyType, PurchaseBill, PurchaseBillInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
 } from './types'
 
 const TOKEN_KEY = 'erp_token'
@@ -84,4 +84,16 @@ export const api = {
   itemLedger: (item_id: number, from?: string, to?: string) => request<ItemLedger>(`/api/reports/item-ledger${qs({ item_id, from, to })}`),
   register: (params: { type: EntryType; from?: string; to?: string; party_id?: number; item_id?: number }) =>
     request<RegisterRow[]>(`/api/reports/register${qs(params)}`),
+
+  getPurchaseBills: (params?: { from?: string; to?: string; supplier_id?: number }) =>
+    request<PurchaseBill[]>(`/api/purchase-bills${qs(params || {})}`),
+  getPurchaseBill: (id: number) => request<PurchaseBill>(`/api/purchase-bills/${id}`),
+  createPurchaseBill: (bill: PurchaseBillInput) => request<PurchaseBill>('/api/purchase-bills', send('POST', bill)),
+  deletePurchaseBill: (id: number) => request<{ success: boolean }>(`/api/purchase-bills/${id}`, send('DELETE')),
+
+  getSalesInvoices: (params?: { from?: string; to?: string; customer_id?: number }) =>
+    request<SalesInvoice[]>(`/api/sales-invoices${qs(params || {})}`),
+  getSalesInvoice: (id: number) => request<SalesInvoice>(`/api/sales-invoices/${id}`),
+  createSalesInvoice: (invoice: SalesInvoiceInput) => request<SalesInvoice>('/api/sales-invoices', send('POST', invoice)),
+  deleteSalesInvoice: (id: number) => request<{ success: boolean }>(`/api/sales-invoices/${id}`, send('DELETE')),
 }

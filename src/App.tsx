@@ -4,6 +4,8 @@ import Dashboard from './pages/Dashboard'
 import Items from './pages/Items'
 import StockEntries from './pages/StockEntries'
 import Parties from './pages/Parties'
+import PurchaseBills from './pages/PurchaseBills'
+import SalesInvoices from './pages/SalesInvoices'
 import Reports from './pages/Reports'
 
 export default function App() {
@@ -14,6 +16,8 @@ export default function App() {
         <Route path="items" element={<Items />} />
         <Route path="stock-in" element={<StockEntries key="IN" type="IN" />} />
         <Route path="stock-out" element={<StockEntries key="OUT" type="OUT" />} />
+        <Route path="purchase-bills" element={<PurchaseBills />} />
+        <Route path="sales-invoices" element={<SalesInvoices />} />
         <Route path="suppliers" element={<Parties key="supplier" type="supplier" />} />
         <Route path="customers" element={<Parties key="customer" type="customer" />} />
         <Route path="reports" element={<Reports />} />

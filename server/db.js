@@ -65,6 +65,59 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_lines_item ON entry_lines(item_id);
     CREATE INDEX IF NOT EXISTS idx_lines_entry ON entry_lines(entry_id);
     CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date);
+
+    CREATE TABLE IF NOT EXISTS purchase_bills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_no TEXT NOT NULL UNIQUE,
+      date TEXT NOT NULL,
+      supplier_id INTEGER REFERENCES parties(id),
+      reference TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      subtotal REAL NOT NULL DEFAULT 0,
+      tax REAL NOT NULL DEFAULT 0,
+      discount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_bill_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bill_id INTEGER NOT NULL REFERENCES purchase_bills(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      qty REAL NOT NULL CHECK (qty > 0),
+      rate REAL NOT NULL DEFAULT 0,
+      amount REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS sales_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_no TEXT NOT NULL UNIQUE,
+      date TEXT NOT NULL,
+      customer_id INTEGER REFERENCES parties(id),
+      reference TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      subtotal REAL NOT NULL DEFAULT 0,
+      tax REAL NOT NULL DEFAULT 0,
+      discount REAL NOT NULL DEFAULT 0,
+      total REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS sales_invoice_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES sales_invoices(id) ON DELETE CASCADE,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      qty REAL NOT NULL CHECK (qty > 0),
+      rate REAL NOT NULL DEFAULT 0,
+      amount REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_purchase_bill_lines_item ON purchase_bill_lines(item_id);
+    CREATE INDEX IF NOT EXISTS idx_purchase_bill_lines_bill ON purchase_bill_lines(bill_id);
+    CREATE INDEX IF NOT EXISTS idx_purchase_bills_date ON purchase_bills(date);
+    CREATE INDEX IF NOT EXISTS idx_sales_invoice_lines_item ON sales_invoice_lines(item_id);
+    CREATE INDEX IF NOT EXISTS idx_sales_invoice_lines_invoice ON sales_invoice_lines(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_sales_invoices_date ON sales_invoices(date);
   `)
 
   const { c } = db.prepare('SELECT COUNT(*) AS c FROM items').get()

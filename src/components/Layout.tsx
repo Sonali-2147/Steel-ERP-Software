@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, Boxes, KeyRound, LayoutDashboard, LogOut, Menu, Package, Truck, Users, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, Boxes, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Receipt, Truck, Users, X,
 } from 'lucide-react'
 import { Button, cx, Field, Input, Modal, Toaster } from './ui'
 import { api } from '@/lib/api'
@@ -13,6 +13,8 @@ const NAV = [
   { to: '/items', label: 'Items', icon: Package },
   { to: '/stock-in', label: 'Stock In', icon: ArrowDownToLine },
   { to: '/stock-out', label: 'Stock Out', icon: ArrowUpFromLine },
+  { to: '/purchase-bills', label: 'Purchase Bills', icon: Receipt },
+  { to: '/sales-invoices', label: 'Sales Invoices', icon: FileText },
   { to: '/suppliers', label: 'Suppliers', icon: Truck },
   { to: '/customers', label: 'Customers', icon: Users },
   { to: '/reports', label: 'Reports', icon: BarChart3 },

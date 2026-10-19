@@ -138,4 +138,94 @@ export interface ImportResult {
   errors: { row: number; message: string }[]
 }
 
+export interface PurchaseBillLine {
+  id?: number
+  bill_id?: number
+  item_id: number
+  qty: number
+  rate: number
+  amount: number
+  code?: string
+  name?: string
+  unit?: string
+}
+
+export interface PurchaseBill {
+  id: number
+  bill_no: string
+  date: string
+  supplier_id: number
+  supplier_name?: string
+  contact_person?: string
+  phone?: string
+  email?: string
+  address?: string
+  city?: string
+  gstin?: string
+  reference: string
+  note: string
+  subtotal: number
+  tax: number
+  discount: number
+  total: number
+  created_at: string
+  lines?: PurchaseBillLine[]
+}
+
+export interface PurchaseBillInput {
+  bill_no?: string
+  date: string
+  supplier_id: number
+  reference: string
+  note: string
+  tax: number
+  discount: number
+  lines: { item_id: number; qty: number; rate: number }[]
+}
+
+export interface SalesInvoiceLine {
+  id?: number
+  invoice_id?: number
+  item_id: number
+  qty: number
+  rate: number
+  amount: number
+  code?: string
+  name?: string
+  unit?: string
+}
+
+export interface SalesInvoice {
+  id: number
+  invoice_no: string
+  date: string
+  customer_id: number
+  customer_name?: string
+  contact_person?: string
+  phone?: string
+  email?: string
+  address?: string
+  city?: string
+  gstin?: string
+  reference: string
+  note: string
+  subtotal: number
+  tax: number
+  discount: number
+  total: number
+  created_at: string
+  lines?: SalesInvoiceLine[]
+}
+
+export interface SalesInvoiceInput {
+  invoice_no?: string
+  date: string
+  customer_id: number
+  reference: string
+  note: string
+  tax: number
+  discount: number
+  lines: { item_id: number; qty: number; rate: number }[]
+}
+
 export const UNITS = ['kg', 'MT', 'pcs', 'nos', 'm', 'ft', 'bundle', 'set']

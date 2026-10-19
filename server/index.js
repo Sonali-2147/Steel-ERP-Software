@@ -77,6 +77,18 @@ function nextEntryNo(type) {
   return `${prefix}${String(max + 1).padStart(4, '0')}`
 }
 
+function nextBillNo() {
+  const rows = db.prepare("SELECT bill_no FROM purchase_bills WHERE bill_no LIKE 'PB-%'").all()
+  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.bill_no.slice(3), 10) || 0), 0)
+  return `PB-${String(max + 1).padStart(4, '0')}`
+}
+
+function nextInvoiceNo() {
+  const rows = db.prepare("SELECT invoice_no FROM sales_invoices WHERE invoice_no LIKE 'INV-%'").all()
+  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.invoice_no.slice(4), 10) || 0), 0)
+  return `INV-${String(max + 1).padStart(4, '0')}`
+}
+
 // ------------------------------------------------------------------
 // Health
 // ------------------------------------------------------------------
@@ -504,6 +516,154 @@ app.get('/api/reports/register', route((req) => {
     WHERE ${cond.join(' AND ')}
     ORDER BY e.date DESC, e.id DESC, l.id
   `).all(...params)
+}))
+
+// ------------------------------------------------------------------
+// Purchase Bills
+// ------------------------------------------------------------------
+
+app.get('/api/purchase-bills', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('b.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('b.date <= ?'); params.push(req.query.to) }
+  if (req.query.supplier_id) { cond.push('b.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
+  return db.prepare(`
+    SELECT b.*, p.name AS supplier_name
+    FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY b.date DESC, b.id DESC
+  `).all(...params)
+}))
+
+app.get('/api/purchase-bills/:id', route((req) => {
+  const bill = db.prepare(`
+    SELECT b.*, p.name AS supplier_name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin
+    FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
+    WHERE b.id = ?
+  `).get(Number(req.params.id))
+  if (!bill) throw new HttpError(404, 'Purchase bill not found')
+  const lines = db.prepare(`
+    SELECT l.*, i.code, i.name, i.unit
+    FROM purchase_bill_lines l JOIN items i ON i.id = l.item_id
+    WHERE l.bill_id = ?
+    ORDER BY l.id
+  `).all(bill.id)
+  return { ...bill, lines }
+}))
+
+app.post('/api/purchase-bills', route((req) => {
+  const body = req.body
+  const supplier = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.supplier_id), 'supplier')
+  if (!supplier) throw new HttpError(400, 'Invalid supplier')
+  if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
+    throw new HttpError(400, 'At least one item is required')
+  }
+
+  return transaction(() => {
+    const billNo = body.bill_no || nextBillNo()
+    const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
+    const tax = num(body.tax)
+    const discount = num(body.discount)
+    const total = subtotal + tax - discount
+
+    const info = db.prepare(`
+      INSERT INTO purchase_bills (bill_no, date, supplier_id, reference, note, subtotal, tax, discount, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(billNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, total)
+
+    const insertLine = db.prepare(`
+      INSERT INTO purchase_bill_lines (bill_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const line of body.lines) {
+      const amount = num(line.qty) * num(line.rate)
+      insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
+    }
+
+    return { id: info.lastInsertRowid, bill_no: billNo }
+  })
+}))
+
+app.delete('/api/purchase-bills/:id', route((req) => {
+  const bill = db.prepare('SELECT id FROM purchase_bills WHERE id = ?').get(Number(req.params.id))
+  if (!bill) throw new HttpError(404, 'Purchase bill not found')
+  db.prepare('DELETE FROM purchase_bills WHERE id = ?').run(bill.id)
+  return { success: true }
+}))
+
+// ------------------------------------------------------------------
+// Sales Invoices
+// ------------------------------------------------------------------
+
+app.get('/api/sales-invoices', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('i.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('i.date <= ?'); params.push(req.query.to) }
+  if (req.query.customer_id) { cond.push('i.customer_id = ?'); params.push(Number(req.query.customer_id)) }
+  return db.prepare(`
+    SELECT i.*, p.name AS customer_name
+    FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY i.date DESC, i.id DESC
+  `).all(...params)
+}))
+
+app.get('/api/sales-invoices/:id', route((req) => {
+  const invoice = db.prepare(`
+    SELECT i.*, p.name AS customer_name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin
+    FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
+    WHERE i.id = ?
+  `).get(Number(req.params.id))
+  if (!invoice) throw new HttpError(404, 'Sales invoice not found')
+  const lines = db.prepare(`
+    SELECT l.*, i.code, i.name, i.unit
+    FROM sales_invoice_lines l JOIN items i ON i.id = l.item_id
+    WHERE l.invoice_id = ?
+    ORDER BY l.id
+  `).all(invoice.id)
+  return { ...invoice, lines }
+}))
+
+app.post('/api/sales-invoices', route((req) => {
+  const body = req.body
+  const customer = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.customer_id), 'customer')
+  if (!customer) throw new HttpError(400, 'Invalid customer')
+  if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
+    throw new HttpError(400, 'At least one item is required')
+  }
+
+  return transaction(() => {
+    const invoiceNo = body.invoice_no || nextInvoiceNo()
+    const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
+    const tax = num(body.tax)
+    const discount = num(body.discount)
+    const total = subtotal + tax - discount
+
+    const info = db.prepare(`
+      INSERT INTO sales_invoices (invoice_no, date, customer_id, reference, note, subtotal, tax, discount, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(invoiceNo, str(body.date) || today(), Number(body.customer_id), str(body.reference), str(body.note), subtotal, tax, discount, total)
+
+    const insertLine = db.prepare(`
+      INSERT INTO sales_invoice_lines (invoice_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const line of body.lines) {
+      const amount = num(line.qty) * num(line.rate)
+      insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
+    }
+
+    return { id: info.lastInsertRowid, invoice_no: invoiceNo }
+  })
+}))
+
+app.delete('/api/sales-invoices/:id', route((req) => {
+  const invoice = db.prepare('SELECT id FROM sales_invoices WHERE id = ?').get(Number(req.params.id))
+  if (!invoice) throw new HttpError(404, 'Sales invoice not found')
+  db.prepare('DELETE FROM sales_invoices WHERE id = ?').run(invoice.id)
+  return { success: true }
 }))
 
 // ------------------------------------------------------------------
