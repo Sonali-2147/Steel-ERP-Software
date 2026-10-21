@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, inr, qty, todayISO } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Entry, EntryType } from '@/lib/types'
 
@@ -95,17 +95,18 @@ export default function StockEntries({ type }: { type: EntryType }) {
         <Table>
           <thead>
             <tr>
-              <Th className="w-8" /><Th>Date</Th><Th>Entry No</Th><Th>{partyLabel}</Th><Th>Bill / Ref No</Th>
+              <Th className="w-8" /><Th>Date</Th><Th>Entry Time</Th><Th>Entry No</Th><Th>{partyLabel}</Th><Th>Bill / Ref No</Th>
               <Th>Items</Th><Th right>Amount</Th><Th right>Actions</Th>
             </tr>
           </thead>
           <tbody>
-            {entries.length === 0 && <EmptyRow cols={8} text={`No ${isIn ? 'stock in' : 'stock out'} entries found.`} />}
+            {entries.length === 0 && <EmptyRow cols={9} text={`No ${isIn ? 'stock in' : 'stock out'} entries found.`} />}
             {entries.map((e) => (
               <Fragment key={e.id}>
                 <Tr onClick={() => setExpanded(expanded === e.id ? null : e.id)}>
                   <Td className="text-slate-400">{expanded === e.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</Td>
                   <Td className="whitespace-nowrap">{fmtDate(e.date)}</Td>
+                  <Td className="whitespace-nowrap text-slate-600">{fmtDateTime(e.created_at || e.date)}</Td>
                   <Td className="font-medium text-slate-900">{e.entry_no}</Td>
                   <Td>{e.party_name || '–'}</Td>
                   <Td>{e.reference || '–'}</Td>
@@ -123,7 +124,7 @@ export default function StockEntries({ type }: { type: EntryType }) {
                 </Tr>
                 {expanded === e.id && (
                   <tr>
-                    <td colSpan={8} className="border-b border-slate-100 bg-slate-50 px-12 py-3">
+                    <td colSpan={9} className="border-b border-slate-100 bg-slate-50 px-12 py-3">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-left text-xs text-slate-500">
@@ -229,6 +230,24 @@ function EntryForm({ type, entry, onClose, onSaved }: { type: EntryType; entry: 
     const valid = lines.filter((l) => l.item_id)
     if (valid.length === 0) return notify('Please select at least one item', 'error')
     if (valid.some((l) => !(Number(l.qty) > 0))) return notify('Please enter quantity for every item', 'error')
+
+    if (!isIn) {
+      const totals = new Map<number, number>()
+      for (const line of valid) {
+        const itemId = Number(line.item_id)
+        totals.set(itemId, (totals.get(itemId) || 0) + Number(line.qty || 0))
+      }
+      for (const [itemId, totalQty] of totals) {
+        const item = itemMap.get(itemId)
+        if (!item) continue
+        const prevQty = entry?.lines.filter((l) => l.item_id === itemId).reduce((sum, l) => sum + l.qty, 0) ?? 0
+        const available = item.stock + prevQty
+        if (totalQty > available) {
+          return notify(`Cannot do stock out for "${item.name}". Requested ${qty(totalQty, item.unit)}, but only ${qty(available, item.unit)} is available.`, 'error')
+        }
+      }
+    }
+
     setSaving(true)
     try {
       const payload = {

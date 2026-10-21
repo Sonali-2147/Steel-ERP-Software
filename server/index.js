@@ -62,6 +62,34 @@ function assertNoNegativeStock(itemIds) {
     }
   }
 }
+
+function assertSufficientStockForOut(lines, previousLines = []) {
+  const newTotals = new Map()
+  const oldTotals = new Map()
+
+  for (const line of lines) {
+    const itemId = Number(line.item_id)
+    const qty = Number(line.qty || 0)
+    if (!itemId || qty <= 0) continue
+    newTotals.set(itemId, (newTotals.get(itemId) || 0) + qty)
+  }
+
+  for (const line of previousLines) {
+    const itemId = Number(line.item_id)
+    const qty = Number(line.qty || 0)
+    if (!itemId || qty <= 0) continue
+    oldTotals.set(itemId, (oldTotals.get(itemId) || 0) + qty)
+  }
+
+  for (const [itemId, newQty] of newTotals) {
+    const oldQty = oldTotals.get(itemId) || 0
+    const available = stockOf(itemId) + oldQty - newQty
+    if (available < -1e-9) {
+      const item = db.prepare('SELECT name, unit FROM items WHERE id = ?').get(itemId)
+      throw new HttpError(400, `Cannot do stock out for "${item.name}". Requested ${round(newQty)} ${item.unit}, but only ${round(stockOf(itemId))} ${item.unit} is available.`)
+    }
+  }
+}
 const round = (n) => Math.round(n * 1000) / 1000
 
 function nextItemCode() {
@@ -347,6 +375,7 @@ function validateEntry(body) {
   for (const l of lines) {
     if (!db.prepare('SELECT id FROM items WHERE id = ?').get(l.item_id)) throw new HttpError(400, 'Selected item not found')
     if (l.qty <= 0) throw new HttpError(400, 'Quantity must be greater than zero')
+    if (l.rate < 0) throw new HttpError(400, 'Rate cannot be negative')
   }
   const partyId = body.party_id ? Number(body.party_id) : null
   return {
@@ -357,6 +386,23 @@ function validateEntry(body) {
     note: str(body.note),
     lines,
   }
+}
+
+function validateBillLines(body, kind = 'item') {
+  const lines = Array.isArray(body.lines) ? body.lines : []
+  if (lines.length === 0) throw new HttpError(400, `At least one ${kind} is required`)
+  const normalized = []
+  for (const line of lines) {
+    const itemId = Number(line.item_id)
+    const qty = num(line.qty)
+    const rate = num(line.rate)
+    if (!itemId) throw new HttpError(400, 'Please select an item for every row')
+    if (!db.prepare('SELECT id FROM items WHERE id = ?').get(itemId)) throw new HttpError(400, 'Selected item not found')
+    if (qty <= 0) throw new HttpError(400, 'Quantity must be greater than zero')
+    if (rate < 0) throw new HttpError(400, 'Rate cannot be negative')
+    normalized.push({ item_id: itemId, qty, rate })
+  }
+  return normalized
 }
 
 function insertLines(entryId, lines) {
@@ -397,13 +443,13 @@ app.get('/api/entries/next-no', route((req) => ({ entry_no: nextEntryNo(req.quer
 app.post('/api/entries', route((req, res) => {
   const e = validateEntry(req.body)
   const id = transaction(() => {
+    if (e.type === 'OUT') assertSufficientStockForOut(e.lines)
     const entryNo = nextEntryNo(e.type)
     const r = db.prepare(`
       INSERT INTO entries (entry_no, type, date, party_id, reference, note) VALUES (?, ?, ?, ?, ?, ?)
     `).run(entryNo, e.type, e.date, e.party_id, e.reference, e.note)
     const entryId = Number(r.lastInsertRowid)
     insertLines(entryId, e.lines)
-    if (e.type === 'OUT') assertNoNegativeStock(e.lines.map((l) => l.item_id))
     return entryId
   })
   res.status(201)
@@ -416,12 +462,12 @@ app.put('/api/entries/:id', route((req) => {
   if (!old) throw new HttpError(404, 'Entry not found')
   const e = validateEntry({ ...req.body, type: old.type })
   transaction(() => {
-    const oldItems = db.prepare('SELECT item_id FROM entry_lines WHERE entry_id = ?').all(id).map((r) => r.item_id)
+    const oldLines = db.prepare('SELECT item_id, qty FROM entry_lines WHERE entry_id = ?').all(id)
+    if (old.type === 'OUT') assertSufficientStockForOut(e.lines, oldLines)
     db.prepare('UPDATE entries SET date = ?, party_id = ?, reference = ?, note = ? WHERE id = ?')
       .run(e.date, e.party_id, e.reference, e.note, id)
     db.prepare('DELETE FROM entry_lines WHERE entry_id = ?').run(id)
     insertLines(id, e.lines)
-    assertNoNegativeStock([...oldItems, ...e.lines.map((l) => l.item_id)])
   })
   return loadEntries('WHERE e.id = ?', [id])[0]
 }))
@@ -469,6 +515,53 @@ app.get('/api/dashboard', route(() => {
       WHERE e.type = 'OUT' AND e.date >= date('now', '-90 days')
       GROUP BY i.id ORDER BY amount DESC, qty DESC LIMIT 5
     `).all(),
+  }
+}))
+
+app.get('/api/profit', route((req) => {
+  const from = str(req.query.from) || '0000-01-01'
+  const to = str(req.query.to) || '9999-12-31'
+
+  const purchase = db.prepare(`
+    SELECT
+      COALESCE(SUM(total), 0) AS total,
+      COALESCE(SUM(loading_amount), 0) AS loading,
+      COALESCE(SUM(unloading_amount), 0) AS unloading,
+      COALESCE(SUM(freight_amount), 0) AS freight
+    FROM purchase_bills
+    WHERE date BETWEEN ? AND ?
+  `).get(from, to)
+
+  const sales = db.prepare(`
+    SELECT
+      COALESCE(SUM(total), 0) AS total,
+      COALESCE(SUM(loading_amount), 0) AS loading,
+      COALESCE(SUM(unloading_amount), 0) AS unloading,
+      COALESCE(SUM(freight_amount), 0) AS freight
+    FROM sales_invoices
+    WHERE date BETWEEN ? AND ?
+  `).get(from, to)
+
+  const salesTotal = Number(sales.total || 0)
+  const purchaseTotal = Number(purchase.total || 0)
+  const loading = Number(sales.loading || 0) + Number(purchase.loading || 0)
+  const unloading = Number(sales.unloading || 0) + Number(purchase.unloading || 0)
+  const freight = Number(sales.freight || 0) + Number(purchase.freight || 0)
+  const totalExpenses = loading + unloading + freight
+  const netBillAmount = salesTotal - totalExpenses
+  const profit = netBillAmount
+
+  return {
+    from,
+    to,
+    salesTotal,
+    purchaseTotal,
+    loading,
+    unloading,
+    freight,
+    totalExpenses,
+    netBillAmount,
+    profit,
   }
 }))
 
@@ -533,7 +626,7 @@ app.get('/api/reports/item-ledger', route((req) => {
   const opening = item.opening_stock + before
   let balance = opening
   const rows = db.prepare(`
-    SELECT e.id AS entry_id, e.entry_no, e.type, e.date, e.reference, p.name AS party_name, l.qty, l.rate
+    SELECT e.id AS entry_id, e.entry_no, e.type, e.date, e.created_at, e.reference, p.name AS party_name, l.qty, l.rate
     FROM entry_lines l JOIN entries e ON e.id = l.entry_id LEFT JOIN parties p ON p.id = e.party_id
     WHERE l.item_id = ? AND e.date BETWEEN ? AND ?
     ORDER BY e.date, e.id, l.id
@@ -554,7 +647,7 @@ app.get('/api/reports/register', route((req) => {
   if (req.query.party_id) { cond.push('e.party_id = ?'); params.push(Number(req.query.party_id)) }
   if (req.query.item_id) { cond.push('l.item_id = ?'); params.push(Number(req.query.item_id)) }
   return db.prepare(`
-    SELECT e.id AS entry_id, e.entry_no, e.date, e.reference, p.name AS party_name,
+    SELECT e.id AS entry_id, e.entry_no, e.date, e.created_at, e.reference, p.name AS party_name,
       i.code AS item_code, i.name AS item_name, i.unit, l.qty, l.rate, l.qty * l.rate AS amount
     FROM entry_lines l JOIN entries e ON e.id = l.entry_id JOIN items i ON i.id = l.item_id
     LEFT JOIN parties p ON p.id = e.party_id
@@ -574,7 +667,7 @@ app.get('/api/purchase-bills', route((req) => {
   if (req.query.to) { cond.push('b.date <= ?'); params.push(req.query.to) }
   if (req.query.supplier_id) { cond.push('b.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
   const bills = db.prepare(`
-    SELECT b.*, p.name AS supplier_name
+    SELECT b.*, p.name AS supplier_name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin
     FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY b.date DESC, b.id DESC
@@ -612,33 +705,35 @@ app.post('/api/purchase-bills', route((req) => {
   const body = req.body
   const supplier = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.supplier_id), 'supplier')
   if (!supplier) throw new HttpError(400, 'Invalid supplier')
-  if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
-    throw new HttpError(400, 'At least one item is required')
-  }
+  const lines = validateBillLines(body, 'item')
 
   return transaction(() => {
     const billNo = body.bill_no || nextBillNo()
-    const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
+    const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
     const tax = num(body.tax)
     const discount = num(body.discount)
-    const total = subtotal + tax - discount
+    const loading_amount = num(body.loading_amount)
+    const unloading_amount = num(body.unloading_amount)
+    const freight_amount = num(body.freight_amount)
+    const total_kg = body.lines.reduce((s, l) => s + num(l.qty), 0)
+    const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
 
     const info = db.prepare(`
-      INSERT INTO purchase_bills (bill_no, date, supplier_id, reference, note, subtotal, tax, discount, total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(billNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, total)
+      INSERT INTO purchase_bills (bill_no, date, supplier_id, reference, note, subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, total_kg, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(billNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, total_kg, total)
 
     const insertLine = db.prepare(`
       INSERT INTO purchase_bill_lines (bill_id, item_id, qty, rate, amount)
       VALUES (?, ?, ?, ?, ?)
     `)
-    for (const line of body.lines) {
-      const amount = num(line.qty) * num(line.rate)
-      insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
+    for (const line of lines) {
+      const amount = line.qty * line.rate
+      insertLine.run(info.lastInsertRowid, Number(line.item_id), line.qty, line.rate, amount)
     }
 
     // Create stock entry for purchase
-    const entryLines = body.lines.map(l => ({ item_id: Number(l.item_id), qty: num(l.qty), rate: num(l.rate) }))
+    const entryLines = lines.map(l => ({ item_id: l.item_id, qty: l.qty, rate: l.rate }))
     createStockEntry('IN', str(body.date) || today(), Number(body.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
 
     return { id: info.lastInsertRowid, bill_no: billNo }
@@ -672,7 +767,7 @@ app.get('/api/sales-invoices', route((req) => {
   if (req.query.to) { cond.push('i.date <= ?'); params.push(req.query.to) }
   if (req.query.customer_id) { cond.push('i.customer_id = ?'); params.push(Number(req.query.customer_id)) }
   const invoices = db.prepare(`
-    SELECT i.*, p.name AS customer_name
+    SELECT i.*, p.name AS customer_name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin
     FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY i.date DESC, i.id DESC
@@ -710,34 +805,36 @@ app.post('/api/sales-invoices', route((req) => {
   const body = req.body
   const customer = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.customer_id), 'customer')
   if (!customer) throw new HttpError(400, 'Invalid customer')
-  if (!body.lines || !Array.isArray(body.lines) || body.lines.length === 0) {
-    throw new HttpError(400, 'At least one item is required')
-  }
+  const lines = validateBillLines(body, 'item')
 
   return transaction(() => {
     const invoiceNo = body.invoice_no || nextInvoiceNo()
-    const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
+    const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
     const tax = num(body.tax)
     const discount = num(body.discount)
-    const total = subtotal + tax - discount
+    const loading_amount = num(body.loading_amount)
+    const unloading_amount = num(body.unloading_amount)
+    const freight_amount = num(body.freight_amount)
+    const total_kg = body.lines.reduce((s, l) => s + num(l.qty), 0)
+    const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
 
     const info = db.prepare(`
-      INSERT INTO sales_invoices (invoice_no, date, customer_id, reference, note, subtotal, tax, discount, total)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(invoiceNo, str(body.date) || today(), Number(body.customer_id), str(body.reference), str(body.note), subtotal, tax, discount, total)
+      INSERT INTO sales_invoices (invoice_no, date, customer_id, reference, note, subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, total_kg, total)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(invoiceNo, str(body.date) || today(), Number(body.customer_id), str(body.reference), str(body.note), subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, total_kg, total)
 
     const insertLine = db.prepare(`
       INSERT INTO sales_invoice_lines (invoice_id, item_id, qty, rate, amount)
       VALUES (?, ?, ?, ?, ?)
     `)
-    for (const line of body.lines) {
-      const amount = num(line.qty) * num(line.rate)
-      insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
+    for (const line of lines) {
+      const amount = line.qty * line.rate
+      insertLine.run(info.lastInsertRowid, Number(line.item_id), line.qty, line.rate, amount)
     }
 
     // Create stock entry for sale
-    const entryLines = body.lines.map(l => ({ item_id: Number(l.item_id), qty: num(l.qty), rate: num(l.rate) }))
-    assertNoNegativeStock(entryLines.map(l => l.item_id))
+    const entryLines = lines.map(l => ({ item_id: l.item_id, qty: l.qty, rate: l.rate }))
+    assertSufficientStockForOut(entryLines)
     createStockEntry('OUT', str(body.date) || today(), Number(body.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
 
     return { id: info.lastInsertRowid, invoice_no: invoiceNo }
@@ -771,7 +868,7 @@ app.get('/api/reports/purchase-register', route((req) => {
   if (req.query.to) { cond.push('b.date <= ?'); params.push(req.query.to) }
   if (req.query.supplier_id) { cond.push('b.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
   return db.prepare(`
-    SELECT b.bill_no, b.date, p.name AS supplier_name, b.reference, b.subtotal, b.tax, b.discount, b.total
+    SELECT b.bill_no, b.date, b.created_at, p.name AS supplier_name, b.reference, b.subtotal, b.tax, b.discount, b.total
     FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY b.date DESC, b.id DESC
@@ -785,7 +882,7 @@ app.get('/api/reports/sales-register', route((req) => {
   if (req.query.to) { cond.push('i.date <= ?'); params.push(req.query.to) }
   if (req.query.customer_id) { cond.push('i.customer_id = ?'); params.push(Number(req.query.customer_id)) }
   return db.prepare(`
-    SELECT i.invoice_no, i.date, p.name AS customer_name, i.reference, i.subtotal, i.tax, i.discount, i.total
+    SELECT i.invoice_no, i.date, i.created_at, p.name AS customer_name, i.reference, i.subtotal, i.tax, i.discount, i.total
     FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY i.date DESC, i.id DESC
@@ -838,14 +935,17 @@ app.post('/api/quotations', route((req) => {
   return transaction(() => {
     const quotationNo = body.quotation_no || nextQuotationNo()
     const subtotal = body.lines.reduce((s, l) => s + (num(l.qty) * num(l.rate)), 0)
-    const tax = num(body.tax)
     const discount = num(body.discount)
-    const total = subtotal + tax - discount
+    const loading_amount = num(body.loading_amount)
+    const unloading_amount = num(body.unloading_amount)
+    const freight_amount = num(body.freight_amount)
+    const total_kg = body.lines.reduce((s, l) => s + num(l.qty), 0)
+    const total = subtotal - discount + loading_amount + unloading_amount + freight_amount
 
     const info = db.prepare(`
-      INSERT INTO quotations (quotation_no, date, supplier_id, reference, note, subtotal, tax, discount, total, valid_until, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(quotationNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, total, str(body.valid_until) || '', str(body.status) || 'pending')
+      INSERT INTO quotations (quotation_no, date, supplier_id, reference, note, subtotal, discount, loading_amount, unloading_amount, freight_amount, total_kg, total, valid_until, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(quotationNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, discount, loading_amount, unloading_amount, freight_amount, total_kg, total, str(body.valid_until) || '', str(body.status) || 'pending')
 
     const insertLine = db.prepare(`
       INSERT INTO quotation_lines (quotation_id, item_id, qty, rate, amount)
@@ -862,7 +962,7 @@ app.post('/api/quotations', route((req) => {
 
 app.put('/api/quotations/:id', route((req) => {
   const body = req.body
-  const quotation = db.prepare('SELECT id, quotation_no, supplier_id, subtotal, tax, discount, total FROM quotations WHERE id = ?').get(Number(req.params.id))
+  const quotation = db.prepare('SELECT id, quotation_no, supplier_id, subtotal, discount, loading_amount, unloading_amount, freight_amount, total_kg, total FROM quotations WHERE id = ?').get(Number(req.params.id))
   if (!quotation) throw new HttpError(404, 'Quotation not found')
 
   if (body.supplier_id) {
@@ -873,13 +973,16 @@ app.put('/api/quotations/:id', route((req) => {
   // Only recalculate totals if lines are provided
   const hasLines = body.lines && Array.isArray(body.lines) && body.lines.length > 0
   const subtotal = hasLines ? body.lines.reduce((s, l) => s + (l.qty * l.rate), 0) : quotation.subtotal
-  const tax = body.tax !== undefined ? Number(body.tax) : quotation.tax
   const discount = body.discount !== undefined ? Number(body.discount) : quotation.discount
-  const total = hasLines ? subtotal + tax - discount : quotation.total
+  const loading_amount = body.loading_amount !== undefined ? Number(body.loading_amount) : quotation.loading_amount
+  const unloading_amount = body.unloading_amount !== undefined ? Number(body.unloading_amount) : quotation.unloading_amount
+  const freight_amount = body.freight_amount !== undefined ? Number(body.freight_amount) : quotation.freight_amount
+  const total_kg = body.total_kg !== undefined ? Number(body.total_kg) : quotation.total_kg
+  const total = hasLines ? subtotal - discount + loading_amount + unloading_amount + freight_amount : quotation.total
 
   db.prepare(`
     UPDATE quotations
-    SET quotation_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, total = ?, valid_until = ?, status = ?
+    SET quotation_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, discount = ?, loading_amount = ?, unloading_amount = ?, freight_amount = ?, total_kg = ?, total = ?, valid_until = ?, status = ?
     WHERE id = ?
   `).run(
     str(body.quotation_no) || quotation.quotation_no,
@@ -888,8 +991,11 @@ app.put('/api/quotations/:id', route((req) => {
     str(body.reference),
     str(body.note),
     subtotal,
-    tax,
     discount,
+    loading_amount,
+    unloading_amount,
+    freight_amount,
+    total_kg,
     total,
     str(body.valid_until) || '',
     str(body.status) || 'pending',
@@ -1030,6 +1136,92 @@ app.put('/api/payments/:id', route((req) => {
   return db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
 }))
 
+// ------------------------------------------------------------------
+// Expenses Ledger
+// ------------------------------------------------------------------
+
+app.get('/api/expenses', route((req) => {
+  const rawType = String(req.query.type || '').trim().toLowerCase()
+  const type = rawType === 'sales' || rawType === 'sales_invoice' ? 'sale' : rawType
+  const q = String(req.query.q || '').trim().toLowerCase()
+  const from = str(req.query.from)
+  const to = str(req.query.to)
+  const partyId = req.query.party_id !== undefined ? Number(req.query.party_id) : null
+
+  const purchaseCond = []
+  const salesCond = []
+  const purchaseParams = []
+  const salesParams = []
+
+  if (from) {
+    purchaseCond.push('pb.date >= ?'); salesCond.push('si.date >= ?')
+    purchaseParams.push(from); salesParams.push(from)
+  }
+  if (to) {
+    purchaseCond.push('pb.date <= ?'); salesCond.push('si.date <= ?')
+    purchaseParams.push(to); salesParams.push(to)
+  }
+  if (partyId) {
+    purchaseCond.push('pb.supplier_id = ?'); salesCond.push('si.customer_id = ?')
+    purchaseParams.push(partyId); salesParams.push(partyId)
+  }
+  if (q) {
+    purchaseCond.push('(LOWER(pb.bill_no) LIKE ? OR LOWER(COALESCE(p.name, \"\")) LIKE ?)')
+    salesCond.push('(LOWER(si.invoice_no) LIKE ? OR LOWER(COALESCE(p.name, \"\")) LIKE ?)')
+    purchaseParams.push(`%${q}%`, `%${q}%`)
+    salesParams.push(`%${q}%`, `%${q}%`)
+  }
+
+  let purchaseBills = []
+  let salesInvoices = []
+
+  if (type === 'purchase' || type === '') {
+    purchaseBills = db.prepare(`
+      SELECT
+        pb.id,
+        'purchase' as type,
+        pb.date,
+        pb.created_at,
+        pb.bill_no as reference,
+        p.name as party_name,
+        pb.loading_amount,
+        pb.unloading_amount,
+        pb.freight_amount,
+        pb.total_kg,
+        (pb.loading_amount + pb.unloading_amount + pb.freight_amount) as total_expenses,
+        pb.supplier_id as party_id
+      FROM purchase_bills pb
+      LEFT JOIN parties p ON p.id = pb.supplier_id
+      ${purchaseCond.length ? 'WHERE ' + purchaseCond.join(' AND ') : ''}
+    `).all(...purchaseParams)
+  }
+
+  if (type === 'sale' || type === '') {
+    salesInvoices = db.prepare(`
+      SELECT
+        si.id,
+        'sale' as type,
+        si.date,
+        si.created_at,
+        si.invoice_no as reference,
+        p.name as party_name,
+        si.loading_amount,
+        si.unloading_amount,
+        si.freight_amount,
+        si.total_kg,
+        (si.loading_amount + si.unloading_amount + si.freight_amount) as total_expenses,
+        si.customer_id as party_id
+      FROM sales_invoices si
+      LEFT JOIN parties p ON p.id = si.customer_id
+      ${salesCond.length ? 'WHERE ' + salesCond.join(' AND ') : ''}
+    `).all(...salesParams)
+  }
+
+  const all = [...purchaseBills, ...salesInvoices]
+  all.sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)
+  return all
+}))
+
 app.delete('/api/payments/:id', route((req) => {
   const id = Number(req.params.id)
   const payment = db.prepare('SELECT id FROM payments WHERE id = ?').get(id)
@@ -1049,7 +1241,7 @@ app.get('/api/reports/payment-in-register', route((req) => {
   if (req.query.to) { cond.push('p.date <= ?'); params.push(req.query.to) }
   if (req.query.party_id) { cond.push('p.party_id = ?'); params.push(Number(req.query.party_id)) }
   return db.prepare(`
-    SELECT p.voucher_no, p.date, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
+    SELECT p.voucher_no, p.date, p.created_at, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
     FROM payments p LEFT JOIN parties party ON party.id = p.party_id
     WHERE p.type = 'IN' ${cond.length ? 'AND ' + cond.join(' AND ') : ''}
     ORDER BY p.date DESC, p.id DESC
@@ -1063,7 +1255,7 @@ app.get('/api/reports/payment-out-register', route((req) => {
   if (req.query.to) { cond.push('p.date <= ?'); params.push(req.query.to) }
   if (req.query.party_id) { cond.push('p.party_id = ?'); params.push(Number(req.query.party_id)) }
   return db.prepare(`
-    SELECT p.voucher_no, p.date, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
+    SELECT p.voucher_no, p.date, p.created_at, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
     FROM payments p LEFT JOIN parties party ON party.id = p.party_id
     WHERE p.type = 'OUT' ${cond.length ? 'AND ' + cond.join(' AND ') : ''}
     ORDER BY p.date DESC, p.id DESC

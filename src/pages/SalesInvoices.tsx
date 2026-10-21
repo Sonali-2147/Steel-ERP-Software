@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { amountInWords, fmtDate, inr, qty, todayISO } from '@/lib/format'
+import { amountInWords, fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { SalesInvoice, SalesInvoiceInput, SalesInvoiceLine } from '@/lib/types'
 
@@ -48,25 +48,17 @@ export default function SalesInvoices() {
     setExpanded(expanded === invoiceId ? null : invoiceId)
   }
 
-  const printInvoice = (invoice: SalesInvoice) => {
-    const fullInvoice = invoice
+  const printInvoice = async (invoice: SalesInvoice) => {
+    const fullInvoice = await api.getSalesInvoice(invoice.id).catch(() => invoice)
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    // Calculate CGST and SGST (assuming 9% each for 18% GST)
-    const cgst = invoice.tax / 2
-    const sgst = invoice.tax / 2
     const totalQty = (fullInvoice.lines || []).reduce((sum, l) => sum + l.qty, 0)
-
-    // Group by HSN code for tax summary
-    const byHsn = new Map<string, { taxable: number; cgstRate: number; sgstRate: number }>()
-    for (const l of fullInvoice.lines || []) {
-      const hsn = l.hsn_code || '-'
-      const gstRate = l.gst_rate || 18
-      const existing = byHsn.get(hsn) || { taxable: 0, cgstRate: gstRate / 2, sgstRate: gstRate / 2 }
-      existing.taxable += l.amount
-      byHsn.set(hsn, existing)
-    }
+    const customerName = fullInvoice.customer_name || invoice.customer_name || '-'
+    const customerAddress = fullInvoice.address || invoice.address || '-'
+    const customerContact = fullInvoice.contact_person || invoice.contact_person || '-'
+    const customerPhone = fullInvoice.phone || invoice.phone || '-'
+    const customerEmail = fullInvoice.email || invoice.email || '-'
 
     printWindow.document.write(`
       <html>
@@ -198,22 +190,18 @@ export default function SalesInvoices() {
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">${fmtDate(invoice.date)}</span></div>
               <div class="field-row"><span class="field-label">Delivery Note:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Reference No. & Date:</span><span class="field-value">${invoice.reference || '-'}</span></div>
-              <div class="field-row"><span class="field-label">Other References:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Buyer's Order No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dispatch Doc No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Delivery Note Date:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Dispatched through:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Destination:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Terms of Delivery:</span><span class="field-value">-</span></div>
             </div>
             <div>
               <div class="section-title">Buyer (Bill to)</div>
-              <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${invoice.customer_name || '-'}</span></div>
-              <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${invoice.address || '-'}</span></div>
-              <div class="field-row"><span class="field-label">GSTIN/UIN:</span><span class="field-value">${invoice.gstin || '-'}</span></div>
-              <div class="field-row"><span class="field-label">State Name:</span><span class="field-value">${invoice.city || '-'}</span></div>
+              <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${customerName}</span></div>
+              <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${customerAddress}</span></div>
+              <div class="field-row"><span class="field-label">Contact Person:</span><span class="field-value">${customerContact}</span></div>
+              <div class="field-row"><span class="field-label">Phone:</span><span class="field-value">${customerPhone}</span></div>
+              <div class="field-row"><span class="field-label">Email:</span><span class="field-value">${customerEmail}</span></div>
             </div>
           </div>
 
@@ -221,11 +209,10 @@ export default function SalesInvoices() {
             <thead>
               <tr>
                 <th style="width: 5%">SI</th>
-                <th style="width: 40%">Description of Goods</th>
-                <th style="width: 10%">HSN/SAC</th>
-                <th style="width: 10%">Quantity</th>
-                <th style="width: 10%">Rate</th>
-                <th style="width: 10%">per</th>
+                <th style="width: 48%">Description of Goods</th>
+                <th style="width: 12%">Quantity</th>
+                <th style="width: 12%">Rate</th>
+                <th style="width: 8%">per</th>
                 <th style="width: 15%">Amount</th>
               </tr>
             </thead>
@@ -234,7 +221,6 @@ export default function SalesInvoices() {
                 <tr>
                   <td class="center">${i + 1}</td>
                   <td>${l.name}</td>
-                  <td class="center">${l.hsn_code || '-'}</td>
                   <td class="right">${qty(l.qty)}</td>
                   <td class="right">${inr(l.rate)}</td>
                   <td class="center">${l.unit}</td>
@@ -244,65 +230,24 @@ export default function SalesInvoices() {
               <tr>
                 <td colspan="2" class="right" style="font-weight: bold;">Total Quantity:</td>
                 <td colspan="2" class="right" style="font-weight: bold;">${qty(totalQty, 'kg')}</td>
-                <td colspan="3"></td>
+                <td colspan="2"></td>
               </tr>
             </tbody>
           </table>
 
           <div class="summary-section">
             <div class="summary-row"><span>Subtotal:</span><span>${inr(invoice.subtotal)}</span></div>
-            <div class="summary-row"><span>CGST:</span><span>${inr(cgst)}</span></div>
-            <div class="summary-row"><span>SGST:</span><span>${inr(sgst)}</span></div>
-            <div class="summary-row"><span>R Off:</span><span>0.00</span></div>
+            <div class="summary-row"><span>Loading Amount:</span><span>${inr(invoice.loading_amount)}</span></div>
+            <div class="summary-row"><span>Unloading Amount:</span><span>${inr(invoice.unloading_amount)}</span></div>
+            <div class="summary-row"><span>Freight Amount:</span><span>${inr(invoice.freight_amount)}</span></div>
+            <div class="summary-row"><span>Total KG:</span><span>${invoice.total_kg}</span></div>
+            <div class="summary-row"><span>Discount:</span><span>${inr(invoice.discount)}</span></div>
             <div class="summary-row" style="font-weight: bold; margin-top: 4px;"><span>Total:</span><span>${inr(invoice.total)}</span></div>
             <div style="margin-top: 4px; font-style: italic;">E. & O.E</div>
           </div>
 
           <div class="amount-words">
             <strong>Amount Chargeable (in words):</strong> ${amountInWords(invoice.total)}
-          </div>
-
-          <div class="summary-section">
-            <div class="section-title">HSN/SAC Tax Summary</div>
-            <table class="tax-summary-table">
-              <thead>
-                <tr>
-                  <th>HSN/SAC</th>
-                  <th>Taxable Value</th>
-                  <th>CGST Rate</th>
-                  <th>CGST Amount</th>
-                  <th>SGST/UTGST Rate</th>
-                  <th>SGST/UTGST Amount</th>
-                  <th>Total Tax Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${Array.from(byHsn.entries()).map(([hsn, data]) => `
-                  <tr>
-                    <td class="center">${hsn}</td>
-                    <td class="right">${inr(data.taxable)}</td>
-                    <td class="center">${data.cgstRate}%</td>
-                    <td class="right">${inr(data.taxable * data.cgstRate / 100)}</td>
-                    <td class="center">${data.sgstRate}%</td>
-                    <td class="right">${inr(data.taxable * data.sgstRate / 100)}</td>
-                    <td class="right">${inr(data.taxable * (data.cgstRate + data.sgstRate) / 100)}</td>
-                  </tr>
-                `).join('')}
-                <tr style="font-weight: bold;">
-                  <td class="center">Total</td>
-                  <td class="right">${inr(invoice.subtotal)}</td>
-                  <td></td>
-                  <td class="right">${inr(cgst)}</td>
-                  <td></td>
-                  <td class="right">${inr(sgst)}</td>
-                  <td class="right">${inr(invoice.tax)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="amount-words">
-            <strong>Tax Amount (in words):</strong> ${amountInWords(invoice.tax)}
           </div>
 
           <div class="bank-details">
@@ -355,6 +300,7 @@ export default function SalesInvoices() {
   }
 
   const total = invoices.reduce((s, inv) => s + inv.total, 0)
+  const totalKg = invoices.reduce((s, inv) => s + (Number(inv.total_kg) || 0), 0)
 
   return (
     <div>
@@ -390,19 +336,20 @@ export default function SalesInvoices() {
         <Table>
           <thead>
             <tr>
-              <Th className="w-8" /><Th>Date</Th><Th>Invoice No</Th><Th>Customer</Th><Th>Reference</Th>
+              <Th className="w-8" /><Th>Date</Th><Th>Entry Time</Th><Th>Invoice No</Th><Th>Customer</Th><Th>Reference</Th>
               <Th>Items</Th><Th right>Subtotal</Th><Th right>Total</Th><Th right>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {invoices.length === 0 ? (
-              <EmptyRow cols={9} text="No sales invoices found" />
+              <EmptyRow cols={10} text="No sales invoices found" />
             ) : invoices.map((inv) => {
               return (
               <Fragment key={inv.id}>
                 <Tr onClick={() => handleExpand(inv.id)} className="cursor-pointer hover:bg-slate-50">
                   <Td><ChevronRight size={16} className={cx('transition-transform', expanded === inv.id && 'rotate-90')} /></Td>
                   <Td>{fmtDate(inv.date)}</Td>
+                  <Td className="whitespace-nowrap text-slate-600">{fmtDateTime(inv.created_at)}</Td>
                   <Td><Badge>{inv.invoice_no}</Badge></Td>
                   <Td>{inv.customer_name}</Td>
                   <Td>{inv.reference || '-'}</Td>
@@ -425,7 +372,7 @@ export default function SalesInvoices() {
                 </Tr>
                 {expanded === inv.id && inv.lines && (
                   <tr className="bg-slate-50">
-                    <td colSpan={9} className="p-4">
+                    <td colSpan={10} className="p-4">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-slate-500">
@@ -449,12 +396,6 @@ export default function SalesInvoices() {
                               </tr>
                             )
                           })}
-                          {inv.tax > 0 && (
-                            <tr className="border-t border-slate-200">
-                              <td colSpan={4} className="py-2 text-right font-medium">Tax</td>
-                              <td className="py-2 text-right">{inr(inv.tax)}</td>
-                            </tr>
-                          )}
                           {inv.discount > 0 && (
                             <tr className="border-t border-slate-200">
                               <td colSpan={4} className="py-2 text-right font-medium">Discount</td>
@@ -462,7 +403,7 @@ export default function SalesInvoices() {
                             </tr>
                           )}
                           <tr className="border-t-2 border-slate-300">
-                            <td colSpan={4} className="py-2 text-right font-semibold">Total</td>
+                            <td colSpan={4} className="py-2 text-right font-semibold">Net Total</td>
                             <td className="py-2 text-right font-semibold">{inr(inv.total)}</td>
                           </tr>
                         </tbody>
@@ -476,7 +417,9 @@ export default function SalesInvoices() {
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
-              <td colSpan={7} className="px-4 py-3 text-right">Total</td>
+              <td colSpan={6} className="px-4 py-3 text-right">Total KG</td>
+              <td className="px-4 py-3 text-right tabular-nums">{qty(totalKg, 'kg')}</td>
+              <td className="px-4 py-3 text-right">Total Amount</td>
               <td className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
               <td />
             </tr>
@@ -507,14 +450,17 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
   const [customerId, setCustomerId] = useState<number | null>(invoice?.customer_id || null)
   const [reference, setReference] = useState(invoice?.reference || '')
   const [note, setNote] = useState(invoice?.note || '')
-  const [tax, setTax] = useState(invoice?.tax || 0)
   const [discount, setDiscount] = useState(invoice?.discount || 0)
+  const [loadingAmount, setLoadingAmount] = useState(invoice?.loading_amount || 0)
+  const [unloadingAmount, setUnloadingAmount] = useState(invoice?.unloading_amount || 0)
+  const [freightAmount, setFreightAmount] = useState(invoice?.freight_amount || 0)
   const [lines, setLines] = useState<Array<{ item_id: number; qty: number; rate: number; amount: number }>>(
     invoice?.lines?.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate, amount: l.amount })) || [{ item_id: 0, qty: 0, rate: 0, amount: 0 }]
   )
 
   const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
-  const total = subtotal + tax - discount
+  const totalKg = lines.reduce((s, l) => s + l.qty, 0)
+  const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount
 
   const updateLine = (index: number, field: keyof SalesInvoiceLine, value: number | null) => {
     const newLines = [...lines]
@@ -538,9 +484,24 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!customerId) return notify('Please select a customer', 'error')
-    if (lines.some((l) => !l.item_id || l.qty <= 0 || l.rate < 0)) {
-      return notify('Please fill all line items with valid values', 'error')
+    if (lines.some((l) => !l.item_id || Number(l.qty) <= 0 || Number(l.rate) < 0)) {
+      return notify('Each sales row must have a valid item, quantity greater than zero, and a non-negative rate.', 'error')
     }
+
+    const totals = new Map<number, number>()
+    for (const line of lines) {
+      if (!line.item_id) continue
+      totals.set(line.item_id, (totals.get(line.item_id) || 0) + Number(line.qty || 0))
+    }
+
+    for (const [itemId, totalQty] of totals) {
+      const item = items.find((it) => it.id === itemId)
+      if (!item) continue
+      if (totalQty > item.stock) {
+        return notify(`Cannot sell "${item.name}". Requested ${qty(totalQty, item.unit)}, but only ${qty(item.stock, item.unit)} is available.`, 'error')
+      }
+    }
+
     setBusy(true)
     try {
       const input: SalesInvoiceInput = {
@@ -549,8 +510,12 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
         customer_id: customerId,
         reference,
         note,
-        tax,
+        tax: 0,
         discount,
+        loading_amount: loadingAmount,
+        unloading_amount: unloadingAmount,
+        freight_amount: freightAmount,
+        total_kg: totalKg,
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
       if (invoice) {
@@ -598,52 +563,90 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
             <span className="font-semibold">Items</span>
             <Button size="sm" variant="ghost" onClick={addLine}><Plus size={14} /> Add Item</Button>
           </div>
-          {lines.map((l, i) => {
-            const item = items.find(it => it.id === l.item_id)
-            return (
-            <div key={i} className="mb-3 grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-5">
-                <SearchSelect
-                  placeholder="Select item"
-                  value={l.item_id || null}
-                  onChange={(v) => updateLine(i, 'item_id', v as number)}
-                  options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
-                />
-                {item && (
-                  <div className="mt-1 text-xs text-slate-500">
-                    Current Stock: {qty(item.stock)} {item.unit}
-                  </div>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
-              </div>
-              <div className="col-span-2 text-right">
-                <span className="text-sm font-medium">{inr(l.amount)}</span>
-              </div>
-              <div className="col-span-1">
-                {lines.length > 1 && (
-                  <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
-                )}
-              </div>
+
+          <div className="overflow-visible rounded-xl border border-slate-200 bg-slate-50">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-100 text-left text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 font-medium">Qty</th>
+                  <th className="px-3 py-2 font-medium">Rate</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="w-12 px-3 py-2 text-center font-medium"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => {
+                  const item = items.find(it => it.id === l.item_id)
+                  return (
+                    <tr key={i} className="border-t border-slate-200 align-top">
+                      <td className="px-3 py-3">
+                        <SearchSelect
+                          placeholder="Select item"
+                          value={l.item_id || null}
+                          onChange={(v) => updateLine(i, 'item_id', v as number)}
+                          options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
+                        />
+                        {item && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            Current Stock: {qty(item.stock)} {item.unit}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
+                      </td>
+                      <td className="px-3 py-3">
+                        <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
+                      </td>
+                      <td className="px-3 py-3 text-right align-middle font-medium text-slate-900">
+                        {inr(l.amount)}
+                      </td>
+                      <td className="px-3 py-3 text-center align-middle">
+                        {lines.length > 1 && (
+                          <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 flex flex-col items-end gap-1 border-t border-slate-200 pt-3 text-sm text-slate-600">
+            <div>
+              <span className="mr-2 text-slate-500">Total KG:</span>
+              <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
             </div>
-            )
-          })}
+            <div>
+              <span className="mr-2 text-slate-500">Total Amount:</span>
+              <span className="font-semibold text-slate-900">{inr(subtotal)}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-4 grid grid-cols-3 gap-4">
-          <Field label="Tax">
-            <Input type="number" step="0.01" value={tax || ''} onChange={(e) => setTax(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <Field label="Discount">
-            <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <div className="flex flex-col justify-end">
-            <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
-            <div className="text-lg font-bold">{inr(total)}</div>
+        <div className="border-t border-slate-200 pt-4">
+          <div className="mb-3 font-semibold">Expenses</div>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <Field label="Loading Amount">
+              <Input type="number" step="0.01" value={loadingAmount || ''} onChange={(e) => setLoadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Unloading Amount">
+              <Input type="number" step="0.01" value={unloadingAmount || ''} onChange={(e) => setUnloadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Freight Amount">
+              <Input type="number" step="0.01" value={freightAmount || ''} onChange={(e) => setFreightAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Discount">
+              <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <div className="flex flex-col justify-end">
+              <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
+              <div className="text-lg font-bold">{inr(total)}</div>
+            </div>
           </div>
         </div>
 

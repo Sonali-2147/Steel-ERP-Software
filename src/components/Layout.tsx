@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, ChevronDown, ChevronLeft, ChevronRight, DollarSign, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Quote, Receipt, Truck, Users, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, ChevronDown, ChevronLeft, ChevronRight, DollarSign, FileText, KeyRound, LogOut, Menu, Package, Quote, Receipt, Truck, Users, Wallet, X,
 } from 'lucide-react'
 import { Button, cx, Field, Input, Modal, Toaster } from './ui'
 import { api } from '@/lib/api'
@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth'
 import { useStore } from '@/lib/store'
 
 const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true, color: 'from-orange-400 to-orange-500' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, color: 'from-orange-400 to-orange-500' },
   {
     label: 'Stock',
     icon: Package,
@@ -48,7 +48,7 @@ const NAV = [
       { to: '/payment-out', label: 'Payment Out', icon: ArrowUpFromLine },
     ],
   },
-  { to: '/reports', label: 'Reports', icon: BarChart3, color: 'from-orange-400 to-orange-500' },
+  { to: '/expenses', label: 'Expenses', icon: Wallet, color: 'from-orange-400 to-orange-500' },
 ]
 
 function UserBox({ collapsed, onToggleCollapse }: { collapsed: boolean; onToggleCollapse: () => void }) {

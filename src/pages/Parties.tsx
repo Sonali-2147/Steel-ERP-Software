@@ -6,14 +6,9 @@ import { downloadCSV } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Party, PartyInput, PartyType } from '@/lib/types'
 
-const EMPTY: PartyInput = { name: '', contact_person: '', phone: '', email: '', address: '', city: '', gstin: '', active: 1 }
+const EMPTY: PartyInput = { name: '', contact_person: '', phone: '', email: '', address: '', city: '', active: 1 }
 
 // Validation functions
-const validateGSTIN = (gstin: string): boolean => {
-  if (!gstin) return true // Optional
-  const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-  return gstinRegex.test(gstin.toUpperCase())
-}
 
 const validatePhone = (phone: string): boolean => {
   if (!phone) return true // Optional
@@ -44,7 +39,7 @@ export default function Parties({ type }: { type: PartyType }) {
     return list.filter((p) => {
       if (status === 'active' && !p.active) return false
       if (status === 'inactive' && p.active) return false
-      return !s || `${p.name} ${p.contact_person} ${p.phone} ${p.city} ${p.gstin}`.toLowerCase().includes(s)
+      return !s || `${p.name} ${p.contact_person} ${p.phone} ${p.city}`.toLowerCase().includes(s)
     })
   }, [list, q, status])
 
@@ -78,7 +73,7 @@ export default function Parties({ type }: { type: PartyType }) {
 
   const exportCSV = () => downloadCSV(`${type}s.csv`, filtered.map((p) => ({
     Name: p.name, 'Contact Person': p.contact_person, Phone: p.phone, Email: p.email,
-    Address: p.address, City: p.city, GSTIN: p.gstin, Status: p.active ? 'Active' : 'Inactive',
+    Address: p.address, City: p.city, Status: p.active ? 'Active' : 'Inactive',
   })))
 
   return (
@@ -104,7 +99,7 @@ export default function Parties({ type }: { type: PartyType }) {
         </div>
         <Table>
           <thead>
-            <tr><Th>Name</Th><Th>Contact Person</Th><Th>Phone</Th><Th>City</Th><Th>GSTIN</Th><Th right>Entries</Th><Th>Status</Th><Th right>Actions</Th></tr>
+            <tr><Th>Name</Th><Th>Contact Person</Th><Th>Phone</Th><Th>City</Th><Th right>Entries</Th><Th>Status</Th><Th right>Actions</Th></tr>
           </thead>
           <tbody>
             {filtered.length === 0 && <EmptyRow cols={8} text={`No ${title.toLowerCase()} yet. Click "New ${single}" to add one.`} />}
@@ -114,7 +109,6 @@ export default function Parties({ type }: { type: PartyType }) {
                 <Td>{p.contact_person || '–'}</Td>
                 <Td>{p.phone || '–'}</Td>
                 <Td>{p.city || '–'}</Td>
-                <Td className="font-mono text-xs">{p.gstin || '–'}</Td>
                 <Td right>{p.entry_count ?? 0}</Td>
                 <Td><StatusBadge status={p.active ? 'Active' : 'Inactive'} /></Td>
                 <Td right>
@@ -162,7 +156,6 @@ function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | n
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.name.trim()) return notify('Name is required', 'error')
-    if (!validateGSTIN(f.gstin)) return notify('Invalid GSTIN format. Example: 27AVTPC3234C2ZS', 'error')
     if (!validatePhone(f.phone)) return notify('Invalid phone number. Must be 10 digits starting with 6-9', 'error')
     if (!validateEmail(f.email)) return notify('Invalid email format', 'error')
     setSaving(true)
@@ -211,7 +204,6 @@ function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | n
             <option value="0">Inactive</option>
           </Select>
         </Field>
-        <Field label="GSTIN" className="sm:col-span-2"><Input value={f.gstin} onChange={(e) => set('gstin', e.target.value)} placeholder="Optional" /></Field>
         <Field label="Address" className="sm:col-span-2"><Textarea rows={2} value={f.address} onChange={(e) => set('address', e.target.value)} /></Field>
       </form>
     </Modal>

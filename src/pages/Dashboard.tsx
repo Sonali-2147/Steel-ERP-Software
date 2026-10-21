@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, IndianRupee, Package, Plus, Upload } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, EmptyRow, PageHeader, StatCard, Table, Td, Th, Tr } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, inr, inrCompact, qty } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, inrCompact, qty } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Dashboard as DashboardData } from '@/lib/types'
 
@@ -13,10 +13,38 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { items, notify } = useStore()
   const [data, setData] = useState<DashboardData | null>(null)
+  const [dayBook, setDayBook] = useState<{ purchase: number; sales: number; entries: number; totalKg: number } | null>(null)
 
   useEffect(() => {
-    api.getDashboard().then(setData).catch((e) => notify(e.message, 'error'))
+    const loadDashboard = () => {
+      api.getDashboard().then(setData).catch((e) => notify(e.message, 'error'))
+    }
+
+    loadDashboard()
+    const id = window.setInterval(loadDashboard, 15000)
+    return () => window.clearInterval(id)
   }, [items, notify])
+
+  useEffect(() => {
+    const loadDayBook = () => {
+      const today = new Date().toISOString().slice(0, 10)
+      Promise.all([
+        api.getPurchaseBills({ from: today, to: today }),
+        api.getSalesInvoices({ from: today, to: today }),
+      ])
+        .then(([purchases, sales]) => {
+          const purchase = purchases.reduce((sum, bill) => sum + Number(bill.total || 0), 0)
+          const sale = sales.reduce((sum, inv) => sum + Number(inv.total || 0), 0)
+          const totalKg = [...purchases, ...sales].reduce((sum, row) => sum + Number(row.total_kg || 0), 0)
+          setDayBook({ purchase, sales: sale, entries: purchases.length + sales.length, totalKg })
+        })
+        .catch(() => setDayBook(null))
+    }
+
+    loadDayBook()
+    const id = window.setInterval(loadDayBook, 15000)
+    return () => window.clearInterval(id)
+  }, [notify])
 
   return (
     <div>
@@ -56,6 +84,34 @@ export default function Dashboard() {
 
       {data && <Suspense fallback={null}><DashboardCharts data={data} /></Suspense>}
 
+      <div className="mt-5">
+        <Card>
+          <CardHeader
+            title="Day Book"
+            subtitle="Today’s purchase and sales summary"
+            action={<Button size="sm" variant="ghost" onClick={() => navigate('/reports?tab=day-book')}>View full report</Button>}
+          />
+          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Purchase</div>
+              <div className="mt-2 text-xl font-bold text-emerald-700">{inr(dayBook?.purchase ?? 0)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Sales</div>
+              <div className="mt-2 text-xl font-bold text-orange-700">{inr(dayBook?.sales ?? 0)}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Entries</div>
+              <div className="mt-2 text-xl font-bold text-slate-900">{dayBook?.entries ?? 0}</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Total KG</div>
+              <div className="mt-2 text-xl font-bold text-blue-700">{qty(dayBook?.totalKg ?? 0, 'kg')}</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader
@@ -90,13 +146,14 @@ export default function Dashboard() {
           <CardHeader title="Recent Entries" subtitle="Latest stock in / stock out" />
           <Table>
             <thead>
-              <tr><Th>Date</Th><Th>Entry</Th><Th>Party</Th><Th right>Items</Th></tr>
+              <tr><Th>Date</Th><Th>Time</Th><Th>Entry</Th><Th>Party</Th><Th right>Items</Th></tr>
             </thead>
             <tbody>
-              {data?.recent.length === 0 && <EmptyRow cols={4} text="No entries yet. Use Stock In / Stock Out to record movements." />}
+              {data?.recent.length === 0 && <EmptyRow cols={5} text="No entries yet. Use Stock In / Stock Out to record movements." />}
               {data?.recent.map((e) => (
                 <Tr key={e.id} onClick={() => navigate(e.type === 'IN' ? '/stock-in' : '/stock-out')}>
                   <Td className="whitespace-nowrap">{fmtDate(e.date)}</Td>
+                  <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((e as any).created_at || e.date)}</Td>
                   <Td>
                     <Badge tone={e.type === 'IN' ? 'green' : 'red'}>{e.type === 'IN' ? 'In' : 'Out'}</Badge>
                     <span className="ml-2 font-medium">{e.entry_no}</span>

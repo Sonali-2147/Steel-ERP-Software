@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, Select, StatusBadge, Table, Td, Textarea, Th, Tr } from '@/components/ui'
 import { api } from '@/lib/api'
-import { downloadCSV, inr, todayISO } from '@/lib/format'
+import { downloadCSV, fmtDateTime, inr, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Payment, PaymentInput, PaymentType, PaymentMode } from '@/lib/types'
 
@@ -192,18 +192,19 @@ export default function Payments({ type: fixedType }: { type?: 'IN' | 'OUT' }) {
         </div>
         <Table>
           <thead>
-            <tr><Th>Voucher No</Th><Th>Type</Th><Th>Date</Th><Th>Party</Th><Th>Mode</Th><Th right>Amount</Th><Th>Reference</Th><Th right>Actions</Th></tr>
+            <tr><Th>Voucher No</Th><Th>Type</Th><Th>Date</Th><Th>Time</Th><Th>Party</Th><Th>Mode</Th><Th right>Amount</Th><Th>Reference</Th><Th right>Actions</Th></tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="py-8 text-center text-slate-400">Loading...</td></tr>
+              <tr><td colSpan={9} className="py-8 text-center text-slate-400">Loading...</td></tr>
             ) : filtered.length === 0 ? (
-              <EmptyRow cols={8} text="No payments yet. Click 'New Payment' to add one." />
+              <EmptyRow cols={9} text="No payments yet. Click 'New Payment' to add one." />
             ) : filtered.map((p) => (
               <Tr key={p.id}>
                 <Td className="font-mono text-xs">{p.voucher_no}</Td>
                 <Td><StatusBadge status={p.type === 'IN' ? 'Payment In' : 'Payment Out'} /></Td>
                 <Td>{p.date}</Td>
+                <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((p as any).created_at || p.date)}</Td>
                 <Td>{p.party_name || '–'}</Td>
                 <Td className="capitalize">{p.mode.replace('_', ' ')}</Td>
                 <Td right className="font-medium">{inr(p.amount)}</Td>

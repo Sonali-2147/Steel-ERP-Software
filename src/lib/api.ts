@@ -120,4 +120,9 @@ export const api = {
     request<any[]>(`/api/reports/payment-in-register${qs(params || {})}`),
   paymentOutRegister: (params?: { from?: string; to?: string; party_id?: number }) =>
     request<any[]>(`/api/reports/payment-out-register${qs(params || {})}`),
+
+  getExpenses: (params?: { from?: string; to?: string; party_id?: number; type?: 'purchase' | 'sale'; q?: string }) =>
+    request<any[]>(`/api/expenses${qs(params || {})}`),
+  getProfit: (params?: { from?: string; to?: string }) =>
+    request<any>(`/api/profit${qs(params || {})}`),
 }

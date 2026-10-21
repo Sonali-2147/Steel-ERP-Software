@@ -16,7 +16,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authToken.get()) {
-      api.me().then(setUser).catch(() => setUser(null)).finally(() => setChecking(false))
+      api.me()
+        .then(setUser)
+        .catch(() => {
+          authToken.clear()
+          window.dispatchEvent(new Event('erp:logout'))
+          setUser(null)
+        })
+        .finally(() => setChecking(false))
+    } else {
+      setChecking(false)
     }
     const onLogout = () => setUser(null)
     window.addEventListener('erp:logout', onLogout)
@@ -33,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { await api.logout() } catch { /* already logged out */ }
     authToken.clear()
     setUser(null)
+    window.dispatchEvent(new Event('erp:logout'))
   }, [])
 
   const value = useMemo(() => ({ user, checking, login, logout }), [user, checking, login, logout])

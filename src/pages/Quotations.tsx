@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, inr, qty, todayISO } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Quotation, QuotationInput, QuotationLine } from '@/lib/types'
 
@@ -66,26 +66,6 @@ export default function Quotations() {
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    // Calculate tax summary by HSN code
-    const taxSummary = new Map<string, { taxable: number; cgst: number; sgst: number; total: number }>()
-    fullQuotation.lines?.forEach(l => {
-      const hsn = l.hsn_code || 'N/A'
-      const gstRate = l.gst_rate || 0
-      const taxable = l.amount
-      const cgst = taxable * (gstRate / 2) / 100
-      const sgst = cgst
-      const total = taxable + cgst + sgst
-
-      if (!taxSummary.has(hsn)) {
-        taxSummary.set(hsn, { taxable: 0, cgst: 0, sgst: 0, total: 0 })
-      }
-      const summary = taxSummary.get(hsn)!
-      summary.taxable += taxable
-      summary.cgst += cgst
-      summary.sgst += sgst
-      summary.total += total
-    })
-
     printWindow.document.write(`
       <html>
       <head>
@@ -111,13 +91,11 @@ export default function Quotations() {
           .text-right { text-align: right; }
           .totals { margin-top: 15px; }
           .totals-row { display: flex; justify-content: flex-end; margin-bottom: 5px; }
-          .totals-label { width: 120px; padding-right: 15px; text-align: right; }
+          .totals-label { width: 150px; padding-right: 15px; text-align: right; }
           .totals-value { width: 100px; text-align: right; }
           .grand-total { font-weight: bold; font-size: 13px; border-top: 2px solid #333; padding-top: 8px; }
-          .tax-summary { margin-top: 20px; border: 1px solid #dee2e6; padding: 10px; }
-          .tax-summary-title { font-weight: bold; margin-bottom: 8px; }
-          .tax-table { width: 100%; border-collapse: collapse; }
-          .tax-table th, .tax-table td { border: 1px solid #dee2e6; padding: 6px; }
+          .expenses-section { margin-top: 15px; border: 1px solid #dee2e6; padding: 10px; }
+          .expenses-title { font-weight: bold; margin-bottom: 8px; }
           .amount-words { margin-top: 15px; font-style: italic; font-size: 11px; }
           .note { margin-top: 15px; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; }
           .declaration { margin-top: 20px; font-size: 10px; color: #666; text-align: center; }
@@ -162,8 +140,7 @@ export default function Quotations() {
                 <th style="width: 10%" class="text-right">HSN/SAC</th>
                 <th style="width: 10%" class="text-right">Qty</th>
                 <th style="width: 10%" class="text-right">Rate</th>
-                <th style="width: 10%" class="text-right">GST %</th>
-                <th style="width: 15%" class="text-right">Amount</th>
+                <th style="width: 25%" class="text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -174,23 +151,35 @@ export default function Quotations() {
                   <td class="text-right">${l.hsn_code || '-'}</td>
                   <td class="text-right">${qty(l.qty)} ${l.unit || ''}</td>
                   <td class="text-right">${inr(l.rate)}</td>
-                  <td class="text-right">${l.gst_rate || 0}%</td>
                   <td class="text-right">${inr(l.amount)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
+          <div class="expenses-section">
+            <div class="expenses-title">Expenses</div>
+            <div class="totals-row">
+              <div class="totals-label">Loading Amount:</div>
+              <div class="totals-value">${inr(quotation.loading_amount)}</div>
+            </div>
+            <div class="totals-row">
+              <div class="totals-label">Unloading Amount:</div>
+              <div class="totals-value">${inr(quotation.unloading_amount)}</div>
+            </div>
+            <div class="totals-row">
+              <div class="totals-label">Freight Amount:</div>
+              <div class="totals-value">${inr(quotation.freight_amount)}</div>
+            </div>
+            <div class="totals-row">
+              <div class="totals-label">Total KG:</div>
+              <div class="totals-value">${quotation.total_kg}</div>
+            </div>
+          </div>
           <div class="totals">
             <div class="totals-row">
               <div class="totals-label">Subtotal:</div>
               <div class="totals-value">${inr(quotation.subtotal)}</div>
             </div>
-            ${quotation.tax > 0 ? `
-              <div class="totals-row">
-                <div class="totals-label">Tax:</div>
-                <div class="totals-value">${inr(quotation.tax)}</div>
-              </div>
-            ` : ''}
             ${quotation.discount > 0 ? `
               <div class="totals-row">
                 <div class="totals-label">Discount:</div>
@@ -202,33 +191,6 @@ export default function Quotations() {
               <div class="totals-value">${inr(quotation.total)}</div>
             </div>
           </div>
-          ${taxSummary.size > 0 ? `
-            <div class="tax-summary">
-              <div class="tax-summary-title">Tax Summary (HSN-wise)</div>
-              <table class="tax-table">
-                <thead>
-                  <tr>
-                    <th>HSN/SAC</th>
-                    <th class="text-right">Taxable Value</th>
-                    <th class="text-right">CGST</th>
-                    <th class="text-right">SGST</th>
-                    <th class="text-right">Total Tax</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${Array.from(taxSummary.entries()).map(([hsn, data]) => `
-                    <tr>
-                      <td>${hsn}</td>
-                      <td class="text-right">${inr(data.taxable)}</td>
-                      <td class="text-right">${inr(data.cgst)}</td>
-                      <td class="text-right">${inr(data.sgst)}</td>
-                      <td class="text-right">${inr(data.cgst + data.sgst)}</td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          ` : ''}
           ${quotation.note ? `
             <div class="note">
               <strong>Note:</strong> ${quotation.note}
@@ -260,6 +222,7 @@ export default function Quotations() {
   }
 
   const total = quotations.reduce((s, q) => s + q.total, 0)
+  const totalKg = quotations.reduce((s, q) => s + (Number(q.total_kg) || 0), 0)
 
   const statusColors: Record<string, string> = {
     pending: 'bg-amber-50 text-amber-700',
@@ -311,13 +274,13 @@ export default function Quotations() {
         <Table>
           <thead>
             <tr>
-              <Th className="w-8" /><Th>Date</Th><Th>Quotation No</Th><Th>Supplier</Th><Th>Valid Until</Th><Th>Status</Th>
+              <Th className="w-8" /><Th>Date</Th><Th>Entry Time</Th><Th>Quotation No</Th><Th>Supplier</Th><Th>Valid Until</Th><Th>Status</Th>
               <Th>Items</Th><Th right>Subtotal</Th><Th right>Total</Th><Th right>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {quotations.length === 0 ? (
-              <EmptyRow cols={10} text="No quotations found" />
+              <EmptyRow cols={11} text="No quotations found" />
             ) : quotations.map((q) => {
               const fullQuotation = quotationDetails.get(q.id) || q
               return (
@@ -325,6 +288,7 @@ export default function Quotations() {
                 <Tr onClick={() => handleExpand(q.id)} className="cursor-pointer hover:bg-slate-50">
                   <Td><ChevronRight size={16} className={cx('transition-transform', expanded === q.id && 'rotate-90')} /></Td>
                   <Td>{fmtDate(q.date)}</Td>
+                  <Td className="whitespace-nowrap text-slate-600">{fmtDateTime(q.created_at)}</Td>
                   <Td><Badge>{q.quotation_no}</Badge></Td>
                   <Td>{q.supplier_name}</Td>
                   <Td>{q.valid_until ? fmtDate(q.valid_until) : '-'}</Td>
@@ -348,7 +312,7 @@ export default function Quotations() {
                 </Tr>
                 {expanded === q.id && fullQuotation.lines && (
                   <tr className="bg-slate-50">
-                    <td colSpan={10} className="p-4">
+                    <td colSpan={11} className="p-4">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-slate-500">
@@ -367,12 +331,6 @@ export default function Quotations() {
                               <td className="py-2 text-right">{inr(l.amount)}</td>
                             </tr>
                           ))}
-                          {q.tax > 0 && (
-                            <tr className="border-t border-slate-200">
-                              <td colSpan={3} className="py-2 text-right font-medium">Tax</td>
-                              <td className="py-2 text-right">{inr(q.tax)}</td>
-                            </tr>
-                          )}
                           {q.discount > 0 && (
                             <tr className="border-t border-slate-200">
                               <td colSpan={3} className="py-2 text-right font-medium">Discount</td>
@@ -394,7 +352,9 @@ export default function Quotations() {
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
-              <td colSpan={8} className="px-4 py-3 text-right">Total</td>
+              <td colSpan={7} className="px-4 py-3 text-right">Total KG</td>
+              <td className="px-4 py-3 text-right tabular-nums">{qty(totalKg, 'kg')}</td>
+              <td className="px-4 py-3 text-right">Total Amount</td>
               <td className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
               <td />
             </tr>
@@ -425,8 +385,10 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
   const [supplierId, setSupplierId] = useState<number | null>(quotation?.supplier_id || null)
   const [reference, setReference] = useState(quotation?.reference || '')
   const [note, setNote] = useState(quotation?.note || '')
-  const [tax, setTax] = useState(quotation?.tax || 0)
   const [discount, setDiscount] = useState(quotation?.discount || 0)
+  const [loadingAmount, setLoadingAmount] = useState(quotation?.loading_amount || 0)
+  const [unloadingAmount, setUnloadingAmount] = useState(quotation?.unloading_amount || 0)
+  const [freightAmount, setFreightAmount] = useState(quotation?.freight_amount || 0)
   const [validUntil, setValidUntil] = useState(quotation?.valid_until || '')
   const [status, setStatus] = useState<'pending' | 'accepted' | 'rejected' | 'expired'>(quotation?.status || 'pending')
   const [lines, setLines] = useState<Array<{ item_id: number; qty: number; rate: number; amount: number }>>(
@@ -434,7 +396,8 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
   )
 
   const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
-  const total = subtotal + tax - discount
+  const totalKg = lines.reduce((s, l) => s + l.qty, 0)
+  const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount
 
   const updateLine = (index: number, field: keyof QuotationLine, value: number | null) => {
     const newLines = [...lines]
@@ -470,8 +433,11 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
         supplier_id: supplierId,
         reference,
         note,
-        tax,
         discount,
+        loading_amount: loadingAmount,
+        unloading_amount: unloadingAmount,
+        freight_amount: freightAmount,
+        total_kg: totalKg,
         valid_until: validUntil,
         status,
         // Only include lines for new quotations or when they've been modified
@@ -533,44 +499,82 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
             <span className="font-semibold">Items</span>
             <Button size="sm" variant="ghost" onClick={addLine}><Plus size={14} /> Add Item</Button>
           </div>
-          {lines.map((l, i) => (
-            <div key={i} className="mb-3 grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-5">
-                <SearchSelect
-                  placeholder="Select item"
-                  value={l.item_id || null}
-                  onChange={(v) => updateLine(i, 'item_id', v as number)}
-                  options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
-                />
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
-              </div>
-              <div className="col-span-2 text-right">
-                <span className="text-sm font-medium">{inr(l.amount)}</span>
-              </div>
-              <div className="col-span-1">
-                {lines.length > 1 && (
-                  <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
-                )}
-              </div>
+
+          <div className="overflow-visible rounded-xl border border-slate-200 bg-slate-50">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-100 text-left text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 font-medium">Qty</th>
+                  <th className="px-3 py-2 font-medium">Rate</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="w-12 px-3 py-2 text-center font-medium"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => (
+                  <tr key={i} className="border-t border-slate-200 align-top">
+                    <td className="px-3 py-3">
+                      <SearchSelect
+                        placeholder="Select item"
+                        value={l.item_id || null}
+                        onChange={(v) => updateLine(i, 'item_id', v as number)}
+                        options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
+                    </td>
+                    <td className="px-3 py-3">
+                      <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
+                    </td>
+                    <td className="px-3 py-3 text-right align-middle font-medium text-slate-900">
+                      {inr(l.amount)}
+                    </td>
+                    <td className="px-3 py-3 text-center align-middle">
+                      {lines.length > 1 && (
+                        <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 flex flex-col items-end gap-1 border-t border-slate-200 pt-3 text-sm text-slate-600">
+            <div>
+              <span className="mr-2 text-slate-500">Total KG:</span>
+              <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
             </div>
-          ))}
+            <div>
+              <span className="mr-2 text-slate-500">Total Amount:</span>
+              <span className="font-semibold text-slate-900">{inr(subtotal)}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-4 grid grid-cols-3 gap-4">
-          <Field label="Tax">
-            <Input type="number" step="0.01" value={tax || ''} onChange={(e) => setTax(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <Field label="Discount">
-            <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <div className="flex flex-col justify-end">
-            <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
-            <div className="text-lg font-bold">{inr(total)}</div>
+        <div className="border-t border-slate-200 pt-4">
+          <div className="mb-3 font-semibold">Expenses</div>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <Field label="Loading Amount">
+              <Input type="number" step="0.01" value={loadingAmount || ''} onChange={(e) => setLoadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Unloading Amount">
+              <Input type="number" step="0.01" value={unloadingAmount || ''} onChange={(e) => setUnloadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Freight Amount">
+              <Input type="number" step="0.01" value={freightAmount || ''} onChange={(e) => setFreightAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Discount">
+              <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <div className="flex flex-col justify-end">
+              <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
+              <div className="text-lg font-bold">{inr(total)}</div>
+            </div>
           </div>
         </div>
 

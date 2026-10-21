@@ -29,12 +29,12 @@ export interface Party {
   email: string
   address: string
   city: string
-  gstin: string
+  gstin?: string
   active: number
   entry_count?: number
 }
 
-export type PartyInput = Pick<Party, 'name' | 'contact_person' | 'phone' | 'email' | 'address' | 'city' | 'gstin' | 'active'>
+export type PartyInput = Pick<Party, 'name' | 'contact_person' | 'phone' | 'email' | 'address' | 'city' | 'active'> & { gstin?: string }
 
 export type EntryType = 'IN' | 'OUT'
 
@@ -53,6 +53,7 @@ export interface Entry {
   entry_no: string
   type: EntryType
   date: string
+  created_at?: string
   party_id: number | null
   party_name: string | null
   reference: string
@@ -171,6 +172,10 @@ export interface PurchaseBill {
   subtotal: number
   tax: number
   discount: number
+  loading_amount: number
+  unloading_amount: number
+  freight_amount: number
+  total_kg: number
   total: number
   created_at: string
   lines?: PurchaseBillLine[]
@@ -184,6 +189,10 @@ export interface PurchaseBillInput {
   note: string
   tax: number
   discount: number
+  loading_amount?: number
+  unloading_amount?: number
+  freight_amount?: number
+  total_kg?: number
   lines: { item_id: number; qty: number; rate: number }[]
 }
 
@@ -218,6 +227,10 @@ export interface SalesInvoice {
   subtotal: number
   tax: number
   discount: number
+  loading_amount: number
+  unloading_amount: number
+  freight_amount: number
+  total_kg: number
   total: number
   created_at: string
   lines?: SalesInvoiceLine[]
@@ -231,6 +244,10 @@ export interface SalesInvoiceInput {
   note: string
   tax: number
   discount: number
+  loading_amount?: number
+  unloading_amount?: number
+  freight_amount?: number
+  total_kg?: number
   lines: { item_id: number; qty: number; rate: number }[]
 }
 
@@ -249,8 +266,11 @@ export interface Quotation {
   reference: string
   note: string
   subtotal: number
-  tax: number
   discount: number
+  loading_amount: number
+  unloading_amount: number
+  freight_amount: number
+  total_kg: number
   total: number
   valid_until: string
   status: 'pending' | 'accepted' | 'rejected' | 'expired'
@@ -278,8 +298,11 @@ export interface QuotationInput {
   supplier_id: number
   reference?: string
   note?: string
-  tax?: number
   discount?: number
+  loading_amount?: number
+  unloading_amount?: number
+  freight_amount?: number
+  total_kg?: number
   valid_until?: string
   status?: string
   lines?: { item_id: number; qty: number; rate: number }[]

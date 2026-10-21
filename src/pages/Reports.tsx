@@ -4,9 +4,9 @@ import {
   AlertTriangle, ArrowDownToLine, ArrowUpFromLine, BookOpen, Download, FileText, IndianRupee, Layers, PackageX, Printer, Receipt, Scale, Users,
   type LucideIcon,
 } from 'lucide-react'
-import { Button, Card, cx, EmptyRow, Field, Input, PageHeader, SearchSelect, Select, StatusBadge, Table, Td, Th, Tr } from '@/components/ui'
+import { Button, Card, CardHeader, cx, EmptyRow, Field, Input, PageHeader, SearchSelect, Select, StatusBadge, Table, Td, Th, Tr } from '@/components/ui'
 import { api } from '@/lib/api'
-import { downloadCSV, fmtDate, inr, monthStartISO, qty, todayISO } from '@/lib/format'
+import { downloadCSV, fmtDate, fmtDateTime, inr, monthStartISO, qty, todayISO } from '@/lib/format'
 import { stockStatus, useStore } from '@/lib/store'
 import type { ItemLedger, RegisterRow, StockSummaryRow } from '@/lib/types'
 
@@ -18,6 +18,8 @@ const TABS = [
   { id: 'in', label: 'Stock In Register', desc: 'Material received', icon: ArrowDownToLine, tone: 'green' },
   { id: 'out', label: 'Stock Out Register', desc: 'Material dispatched', icon: ArrowUpFromLine, tone: 'red' },
   { id: 'purchase', label: 'Purchase Register', desc: 'Purchase bills summary', icon: Receipt, tone: 'emerald' },
+  { id: 'day-book', label: 'Day Book', desc: 'Purchase + sale daily ledger', icon: BookOpen, tone: 'slate' },
+  { id: 'item-profit', label: 'Item Profit / Loss', desc: 'Item-wise purchase vs sales', icon: IndianRupee, tone: 'blue' },
   { id: 'sales', label: 'Sales Register', desc: 'Sales invoices summary', icon: FileText, tone: 'orange' },
   { id: 'payment-in', label: 'Payment In Register', desc: 'Payments received', icon: ArrowDownToLine, tone: 'green' },
   { id: 'payment-out', label: 'Payment Out Register', desc: 'Payments made', icon: ArrowUpFromLine, tone: 'red' },
@@ -57,6 +59,98 @@ function Kpis({ items }: { items: Kpi[] }) {
 
 const sumKg = (n: number) => qty(n, 'kg')
 
+type ItemProfitRow = {
+  item_id: number
+  item_code: string
+  item_name: string
+  unit: string
+  purchase_qty: number
+  sales_qty: number
+  purchase_value: number
+  sales_value: number
+  profit_loss: number
+}
+
+function buildItemProfitRows(purchaseRows: any[], salesRows: any[], items: any[]): ItemProfitRow[] {
+  const map = new Map<number, ItemProfitRow>()
+
+  const addPurchase = (line: any) => {
+    const itemId = Number(line.item_id)
+    const item = items.find((it) => it.id === itemId) || {
+      code: line.code || '–',
+      name: line.name || 'Unknown Item',
+      unit: line.unit || 'kg',
+    }
+    const entry = map.get(itemId) || {
+      item_id: itemId,
+      item_code: item.code || '–',
+      item_name: item.name || 'Unknown Item',
+      unit: item.unit || 'kg',
+      purchase_qty: 0,
+      sales_qty: 0,
+      purchase_value: 0,
+      sales_value: 0,
+      profit_loss: 0,
+    }
+    entry.purchase_qty += Number(line.qty || 0)
+    entry.purchase_value += Number(line.amount ?? (Number(line.qty || 0) * Number(line.rate || 0)))
+    map.set(itemId, entry)
+  }
+
+  const addSale = (line: any) => {
+    const itemId = Number(line.item_id)
+    const item = items.find((it) => it.id === itemId) || {
+      code: line.code || '–',
+      name: line.name || 'Unknown Item',
+      unit: line.unit || 'kg',
+    }
+    const entry = map.get(itemId) || {
+      item_id: itemId,
+      item_code: item.code || '–',
+      item_name: item.name || 'Unknown Item',
+      unit: item.unit || 'kg',
+      purchase_qty: 0,
+      sales_qty: 0,
+      purchase_value: 0,
+      sales_value: 0,
+      profit_loss: 0,
+    }
+    entry.sales_qty += Number(line.qty || 0)
+    entry.sales_value += Number(line.amount ?? (Number(line.qty || 0) * Number(line.rate || 0)))
+    map.set(itemId, entry)
+  }
+
+  for (const bill of purchaseRows) {
+    for (const line of bill.lines || []) addPurchase(line)
+  }
+  for (const invoice of salesRows) {
+    for (const line of invoice.lines || []) addSale(line)
+  }
+
+  return [...map.values()].map((row) => {
+    const purchaseQty = Number(row.purchase_qty || 0)
+    const salesQty = Number(row.sales_qty || 0)
+    const totalPurchaseValue = Number(row.purchase_value || 0)
+    const totalSalesValue = Number(row.sales_value || 0)
+
+    let adjustedPurchaseValue = 0
+    if (purchaseQty > 0 && salesQty > 0) {
+      const matchedQty = Math.min(salesQty, purchaseQty)
+      adjustedPurchaseValue = totalPurchaseValue * (matchedQty / purchaseQty)
+    } else if (salesQty > 0) {
+      adjustedPurchaseValue = totalSalesValue
+    }
+
+    adjustedPurchaseValue = Math.min(adjustedPurchaseValue, totalSalesValue)
+
+    return {
+      ...row,
+      purchase_value: adjustedPurchaseValue,
+      profit_loss: totalSalesValue - adjustedPurchaseValue,
+    }
+  }).sort((a, b) => Math.abs(b.profit_loss) - Math.abs(a.profit_loss))
+}
+
 export default function Reports() {
   const [params, setParams] = useSearchParams()
   const tab = TABS.some((t) => t.id === params.get('tab')) ? params.get('tab')! : 'summary'
@@ -81,6 +175,8 @@ export default function Reports() {
       {tab === 'in' && <Register key="IN" type="IN" />}
       {tab === 'out' && <Register key="OUT" type="OUT" />}
       {tab === 'purchase' && <PurchaseRegister />}
+      {tab === 'day-book' && <DayBookReport />}
+      {tab === 'item-profit' && <ItemProfitLossReport />}
       {tab === 'sales' && <SalesRegister />}
       {tab === 'payment-in' && <PaymentRegister key="IN" type="IN" />}
       {tab === 'payment-out' && <PaymentRegister key="OUT" type="OUT" />}
@@ -243,7 +339,7 @@ function ItemLedgerReport() {
       ) : (
         <Table>
           <thead>
-            <tr><Th>Date</Th><Th>Entry No</Th><Th>Supplier / Customer</Th><Th>Bill / Ref</Th><Th right>In</Th><Th right>Out</Th><Th right>Balance</Th></tr>
+            <tr><Th>Date</Th><Th>Time</Th><Th>Entry No</Th><Th>Supplier / Customer</Th><Th>Bill / Ref</Th><Th right>In</Th><Th right>Out</Th><Th right>Balance</Th></tr>
           </thead>
           <tbody>
             <tr className="bg-slate-50">
@@ -255,6 +351,7 @@ function ItemLedgerReport() {
             {data.rows.map((r, idx) => (
               <Tr key={idx}>
                 <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+                <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
                 <Td className="font-medium">{r.entry_no}</Td>
                 <Td>{r.party_name || '–'}</Td>
                 <Td>{r.reference || '–'}</Td>
@@ -326,13 +423,14 @@ function Register({ type }: { type: 'IN' | 'OUT' }) {
       <PrintTitle title={`Stock ${isIn ? 'In' : 'Out'} Register`} sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
       <Table>
         <thead>
-          <tr><Th>Date</Th><Th>Entry No</Th><Th>{partyLabel}</Th><Th>Bill / Ref</Th><Th>Item</Th><Th right>Quantity</Th><Th right>Rate</Th><Th right>Amount</Th></tr>
+          <tr><Th>Date</Th><Th>Time</Th><Th>Entry No</Th><Th>{partyLabel}</Th><Th>Bill / Ref</Th><Th>Item</Th><Th right>Quantity</Th><Th right>Rate</Th><Th right>Amount</Th></tr>
         </thead>
         <tbody>
           {rows.length === 0 && <EmptyRow cols={8} />}
           {rows.map((r, idx) => (
             <Tr key={idx}>
               <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
               <Td className="font-medium">{r.entry_no}</Td>
               <Td>{r.party_name || '–'}</Td>
               <Td>{r.reference || '–'}</Td>
@@ -407,6 +505,73 @@ function LowStock() {
   )
 }
 
+function ItemProfitLossReport() {
+  const { items, notify } = useStore()
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(todayISO())
+  const [rows, setRows] = useState<ItemProfitRow[]>([])
+
+  useEffect(() => {
+    Promise.all([
+      api.getPurchaseBills({ from, to }),
+      api.getSalesInvoices({ from, to }),
+    ])
+      .then(([purchase, sales]) => setRows(buildItemProfitRows(purchase, sales, items)))
+      .catch((e) => notify(e.message, 'error'))
+  }, [from, to, items, notify])
+
+  const totalPurchase = rows.reduce((s, r) => s + r.purchase_value, 0)
+  const totalSales = rows.reduce((s, r) => s + r.sales_value, 0)
+  const netProfit = totalSales - totalPurchase
+
+  const exportCSV = () => downloadCSV(`item-profit-loss-${from}-to-${to}.csv`, rows.map((r) => ({
+    'Item Code': r.item_code,
+    'Item Name': r.item_name,
+    Unit: r.unit,
+    'Purchase Qty': r.purchase_qty,
+    'Purchase Value': r.purchase_value,
+    'Sales Qty': r.sales_qty,
+    'Sales Value': r.sales_value,
+    'Profit / Loss': r.profit_loss,
+  })))
+
+  return (
+    <div className="space-y-5">
+      <Kpis items={[
+        { label: 'Items', value: String(rows.length), icon: PackageX, tone: 'slate' },
+        { label: 'Purchase Value', value: inr(totalPurchase), icon: Receipt, tone: 'emerald' },
+        { label: 'Sales Value', value: inr(totalSales), icon: FileText, tone: 'orange' },
+        { label: 'Net Profit / Loss', value: inr(netProfit), icon: IndianRupee, tone: netProfit >= 0 ? 'green' : 'red' },
+      ]} />
+      <Card>
+        <Toolbar onExport={exportCSV}>
+          <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        </Toolbar>
+        <PrintTitle title="Item Profit / Loss Report" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
+        <Table>
+          <thead>
+            <tr><Th>Item</Th><Th>Code</Th><Th right>Purchase Qty</Th><Th right>Purchase Value</Th><Th right>Sales Qty</Th><Th right>Sales Value</Th><Th right>Profit / Loss</Th></tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && <EmptyRow cols={7} text="No item profit/loss data found for this period." />}
+            {rows.map((r) => (
+              <Tr key={r.item_id}>
+                <Td className="font-medium text-slate-900">{r.item_name}</Td>
+                <Td className="font-mono text-xs text-slate-500">{r.item_code}</Td>
+                <Td right>{qty(r.purchase_qty, r.unit)}</Td>
+                <Td right>{inr(r.purchase_value)}</Td>
+                <Td right>{qty(r.sales_qty, r.unit)}</Td>
+                <Td right>{inr(r.sales_value)}</Td>
+                <Td right className={cx('font-semibold', r.profit_loss >= 0 ? 'text-emerald-700' : 'text-red-700')}>{inr(r.profit_loss)}</Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      </Card>
+    </div>
+  )
+}
+
 function PurchaseRegister() {
   const { suppliers, notify } = useStore()
   const [from, setFrom] = useState(monthStartISO())
@@ -446,13 +611,14 @@ function PurchaseRegister() {
       <PrintTitle title="Purchase Register" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
       <Table>
         <thead>
-          <tr><Th>Date</Th><Th>Bill No</Th><Th>Supplier</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
+          <tr><Th>Date</Th><Th>Time</Th><Th>Bill No</Th><Th>Supplier</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
         </thead>
         <tbody>
           {rows.length === 0 && <EmptyRow cols={8} />}
           {rows.map((r, idx) => (
             <Tr key={idx}>
               <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
               <Td className="font-medium">{r.bill_no}</Td>
               <Td>{r.supplier_name || '–'}</Td>
               <Td>{r.reference || '–'}</Td>
@@ -516,13 +682,14 @@ function SalesRegister() {
       <PrintTitle title="Sales Register" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
       <Table>
         <thead>
-          <tr><Th>Date</Th><Th>Invoice No</Th><Th>Customer</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
+          <tr><Th>Date</Th><Th>Time</Th><Th>Invoice No</Th><Th>Customer</Th><Th>Reference</Th><Th right>Subtotal</Th><Th right>Tax</Th><Th right>Discount</Th><Th right>Total</Th></tr>
         </thead>
         <tbody>
           {rows.length === 0 && <EmptyRow cols={8} />}
           {rows.map((r, idx) => (
             <Tr key={idx}>
               <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
               <Td className="font-medium">{r.invoice_no}</Td>
               <Td>{r.customer_name || '–'}</Td>
               <Td>{r.reference || '–'}</Td>
@@ -543,6 +710,171 @@ function SalesRegister() {
         )}
       </Table>
     </Card>
+    </div>
+  )
+}
+
+function DayBookReport() {
+  const { suppliers, customers, items, notify } = useStore()
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(todayISO())
+  const [partyId, setPartyId] = useState<number | null>(null)
+  const [partyType, setPartyType] = useState<'all' | 'supplier' | 'customer'>('all')
+  const [purchaseRows, setPurchaseRows] = useState<any[]>([])
+  const [salesRows, setSalesRows] = useState<any[]>([])
+  const [rows, setRows] = useState<any[]>([])
+
+  useEffect(() => {
+    const allParties = [...suppliers, ...customers]
+    const filteredPartyId = partyId && allParties.some((p) => p.id === partyId) ? partyId : undefined
+
+    Promise.all([
+      api.getPurchaseBills({ from, to, supplier_id: partyType === 'customer' ? undefined : filteredPartyId }),
+      api.getSalesInvoices({ from, to, customer_id: partyType === 'supplier' ? undefined : filteredPartyId }),
+    ])
+      .then(([purchase, sales]) => {
+        setPurchaseRows(purchase)
+        setSalesRows(sales)
+        const combined = [
+          ...purchase.map((b) => ({
+            date: b.date,
+            type: 'Purchase',
+            doc_no: b.bill_no,
+            party_name: b.supplier_name || '–',
+            reference: b.reference || '–',
+            total_kg: b.total_kg || 0,
+            amount: b.total || 0,
+            expense_total: (Number(b.loading_amount || 0) + Number(b.unloading_amount || 0) + Number(b.freight_amount || 0)),
+          })),
+          ...sales.map((i) => ({
+            date: i.date,
+            type: 'Sale',
+            doc_no: i.invoice_no,
+            party_name: i.customer_name || '–',
+            reference: i.reference || '–',
+            total_kg: i.total_kg || 0,
+            amount: i.total || 0,
+            expense_total: (Number(i.loading_amount || 0) + Number(i.unloading_amount || 0) + Number(i.freight_amount || 0)),
+          })),
+        ].sort((a, b) => b.date.localeCompare(a.date) || a.doc_no.localeCompare(b.doc_no))
+        setRows(combined)
+      })
+      .catch((e) => notify(e.message, 'error'))
+  }, [from, to, partyId, partyType, suppliers, customers, notify])
+
+  const purchases = rows.filter((r) => r.type === 'Purchase').reduce((s, r) => s + r.amount, 0)
+  const sales = rows.filter((r) => r.type === 'Sale').reduce((s, r) => s + r.amount, 0)
+  const totalExpenses = rows.reduce((s, r) => s + Number(r.expense_total || 0), 0)
+  const totalKg = rows.reduce((s, r) => s + Number(r.total_kg || 0), 0)
+  const netBillAmount = sales - totalExpenses
+  const itemProfitRows = buildItemProfitRows(purchaseRows, salesRows, items)
+  const itemProfitTotal = itemProfitRows.reduce((s, r) => s + r.profit_loss, 0)
+
+  const exportCSV = () => downloadCSV(`day-book-${from}-to-${to}.csv`, rows.map((r) => ({
+    Date: r.date,
+    Type: r.type,
+    'Doc No': r.doc_no,
+    Party: r.party_name,
+    Reference: r.reference,
+    'Total KG': r.total_kg,
+    Amount: r.amount,
+  })))
+
+  return (
+    <div className="space-y-5">
+      <Kpis items={[
+        { label: 'Entries', value: String(rows.length), icon: FileText, tone: 'slate' },
+        { label: 'Purchase', value: inr(purchases), icon: Receipt, tone: 'emerald' },
+        { label: 'Sales', value: inr(sales), icon: FileText, tone: 'orange' },
+        { label: 'Total KG', value: qty(totalKg, 'kg'), icon: Scale, tone: 'blue' },
+      ]} />
+      <Card>
+        <Toolbar onExport={exportCSV}>
+          <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
+          <Field label="Party Type">
+            <Select value={partyType} onChange={(e) => setPartyType(e.target.value as 'all' | 'supplier' | 'customer')} className="md:w-40">
+              <option value="all">All</option>
+              <option value="supplier">Supplier</option>
+              <option value="customer">Customer</option>
+            </Select>
+          </Field>
+          <Field label="Party">
+            <SearchSelect
+              className="md:w-56"
+              placeholder="All"
+              value={partyId}
+              onChange={setPartyId}
+              options={[...suppliers.map((p) => ({ value: p.id, label: p.name, sub: 'supplier' })), ...customers.map((p) => ({ value: p.id, label: p.name, sub: 'customer' }))]
+                .filter((p) => partyType === 'all' || p.sub === partyType)}
+            />
+          </Field>
+        </Toolbar>
+        <PrintTitle title="Day Book" sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
+        <Table>
+          <thead>
+            <tr><Th>Date</Th><Th>Time</Th><Th>Type</Th><Th>Doc No</Th><Th>Party</Th><Th>Reference</Th><Th right>Total KG</Th><Th right>Amount</Th></tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && <EmptyRow cols={7} text="No day book entries found" />}
+            {rows.map((r, idx) => (
+              <Tr key={`${r.type}-${r.doc_no}-${idx}`}>
+                <Td>{fmtDate(r.date)}</Td>
+                <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
+                <Td>
+                  <span className={cx('inline-flex rounded-full px-2 py-0.5 text-xs font-medium', r.type === 'Purchase' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700')}>
+                    {r.type}
+                  </span>
+                </Td>
+                <Td className="font-medium">{r.doc_no}</Td>
+                <Td>{r.party_name}</Td>
+                <Td>{r.reference}</Td>
+                <Td right>{qty(r.total_kg, 'kg')}</Td>
+                <Td right className={cx('font-semibold', r.type === 'Purchase' ? 'text-emerald-700' : 'text-orange-700')}>{inr(r.amount)}</Td>
+              </Tr>
+            ))}
+          </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr>
+                <td colSpan={5} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Net Bill Amount</td>
+                <td className="px-4 py-3 text-right text-sm font-semibold">{qty(totalKg, 'kg')}</td>
+                <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-700">{inr(netBillAmount)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </Table>
+      </Card>
+
+      <Card>
+        <CardHeader title="Item-wise Profit / Loss" subtitle="Purchase value vs sales value by item" />
+        <Table>
+          <thead>
+            <tr><Th>Item</Th><Th>Code</Th><Th right>Purchase Qty</Th><Th right>Purchase Value</Th><Th right>Sales Qty</Th><Th right>Sales Value</Th><Th right>Profit / Loss</Th></tr>
+          </thead>
+          <tbody>
+            {itemProfitRows.length === 0 && <EmptyRow cols={7} text="No item profit/loss data found." />}
+            {itemProfitRows.map((r) => (
+              <Tr key={r.item_id}>
+                <Td className="font-medium text-slate-900">{r.item_name}</Td>
+                <Td className="font-mono text-xs text-slate-500">{r.item_code}</Td>
+                <Td right>{qty(r.purchase_qty, r.unit)}</Td>
+                <Td right>{inr(r.purchase_value)}</Td>
+                <Td right>{qty(r.sales_qty, r.unit)}</Td>
+                <Td right>{inr(r.sales_value)}</Td>
+                <Td right className={cx('font-semibold', r.profit_loss >= 0 ? 'text-emerald-700' : 'text-red-700')}>{inr(r.profit_loss)}</Td>
+              </Tr>
+            ))}
+          </tbody>
+          {itemProfitRows.length > 0 && (
+            <tfoot>
+              <tr>
+                <td colSpan={6} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Total item profit / loss</td>
+                <td className="px-4 py-3 text-right text-sm font-semibold text-slate-700">{inr(itemProfitTotal)}</td>
+              </tr>
+            </tfoot>
+          )}
+        </Table>
+      </Card>
     </div>
   )
 }
@@ -592,13 +924,14 @@ function PaymentRegister({ type }: { type: 'IN' | 'OUT' }) {
       <PrintTitle title={`Payment ${isIn ? 'In' : 'Out'} Register`} sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
       <Table>
         <thead>
-          <tr><Th>Date</Th><Th>Voucher No</Th><Th>{partyLabel}</Th><Th>Mode</Th><Th>Reference No</Th><Th>Bank Name</Th><Th right>Amount</Th><Th>Note</Th></tr>
+          <tr><Th>Date</Th><Th>Time</Th><Th>Voucher No</Th><Th>{partyLabel}</Th><Th>Mode</Th><Th>Reference No</Th><Th>Bank Name</Th><Th right>Amount</Th><Th>Note</Th></tr>
         </thead>
         <tbody>
           {rows.length === 0 && <EmptyRow cols={8} />}
           {rows.map((r, idx) => (
             <Tr key={idx}>
               <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="whitespace-nowrap text-slate-600">{fmtDateTime((r as any).created_at || r.date)}</Td>
               <Td className="font-medium">{r.voucher_no}</Td>
               <Td>{r.party_name || '–'}</Td>
               <Td className="capitalize">{r.mode.replace('_', ' ')}</Td>

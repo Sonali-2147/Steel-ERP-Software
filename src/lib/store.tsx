@@ -44,7 +44,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [i, p, pb, si] = await Promise.all([api.getItems(), api.getParties(), api.getPurchaseBills(), api.getSalesInvoices()])
+      const results = await Promise.allSettled([
+        api.getItems(),
+        api.getParties(),
+        api.getPurchaseBills(),
+        api.getSalesInvoices(),
+      ])
+
+      const success = results.filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
+      if (success.length === 0) {
+        setConnected(false)
+        return
+      }
+
+      const [i, p, pb, si] = success.map((r) => r.value)
       setItems(i)
       setParties(p)
       setPurchaseBills(pb)

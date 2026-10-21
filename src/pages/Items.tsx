@@ -65,6 +65,9 @@ export default function Items() {
 
   useEffect(() => setPage(1), [q, category, status])
 
+  const totalKg = filtered.reduce((sum, i) => sum + i.stock, 0)
+  const totalAmount = filtered.reduce((sum, i) => sum + (i.stock * i.purchase_rate), 0)
+
   const exportCSV = () =>
     downloadCSV('items.csv', filtered.map((i) => ({
       'Item Code': i.code, 'Item Name': i.name, Category: i.category, Grade: i.grade, Size: i.size, Unit: i.unit,
@@ -165,6 +168,16 @@ export default function Items() {
           </tbody>
         </Table>
         <Pagination page={page} pageSize={PAGE} total={filtered.length} onPage={setPage} />
+        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-end md:gap-8">
+          <div>
+            <span className="mr-2 text-slate-500">Total KG:</span>
+            <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
+          </div>
+          <div>
+            <span className="mr-2 text-slate-500">Total Amount:</span>
+            <span className="font-semibold text-slate-900">{inr(totalAmount)}</span>
+          </div>
+        </div>
       </Card>
 
       {formOpen && <ItemForm item={editing} categories={categories} onClose={() => setFormOpen(false)} />}

@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { amountInWords, fmtDate, inr, qty, todayISO } from '@/lib/format'
+import { amountInWords, fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
 
@@ -47,25 +47,17 @@ export default function PurchaseBills() {
     setExpanded(expanded === billId ? null : billId)
   }
 
-  const printBill = (bill: PurchaseBill) => {
-    const fullBill = bill
+  const printBill = async (bill: PurchaseBill) => {
+    const fullBill = await api.getPurchaseBill(bill.id).catch(() => bill)
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
 
-    // Calculate CGST and SGST (assuming 9% each for 18% GST)
-    const cgst = bill.tax / 2
-    const sgst = bill.tax / 2
     const totalQty = (fullBill.lines || []).reduce((sum, l) => sum + l.qty, 0)
-
-    // Group by HSN code for tax summary
-    const byHsn = new Map<string, { taxable: number; cgstRate: number; sgstRate: number }>()
-    for (const l of fullBill.lines || []) {
-      const hsn = l.hsn_code || '-'
-      const gstRate = l.gst_rate || 18
-      const existing = byHsn.get(hsn) || { taxable: 0, cgstRate: gstRate / 2, sgstRate: gstRate / 2 }
-      existing.taxable += l.amount
-      byHsn.set(hsn, existing)
-    }
+    const supplierName = fullBill.supplier_name || bill.supplier_name || '-'
+    const supplierAddress = fullBill.address || bill.address || '-'
+    const supplierContact = fullBill.contact_person || bill.contact_person || '-'
+    const supplierPhone = fullBill.phone || bill.phone || '-'
+    const supplierEmail = fullBill.email || bill.email || '-'
 
     printWindow.document.write(`
       <html>
@@ -197,22 +189,18 @@ export default function PurchaseBills() {
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">${fmtDate(bill.date)}</span></div>
               <div class="field-row"><span class="field-label">Delivery Note:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Reference No. & Date:</span><span class="field-value">${bill.reference || '-'}</span></div>
-              <div class="field-row"><span class="field-label">Other References:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Supplier's Order No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dispatch Doc No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Delivery Note Date:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Dispatched through:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Destination:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Terms of Delivery:</span><span class="field-value">-</span></div>
             </div>
             <div>
               <div class="section-title">Supplier (Bill to)</div>
-              <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${bill.supplier_name || '-'}</span></div>
-              <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${bill.address || '-'}</span></div>
-              <div class="field-row"><span class="field-label">GSTIN/UIN:</span><span class="field-value">${bill.gstin || '-'}</span></div>
-              <div class="field-row"><span class="field-label">State Name:</span><span class="field-value">${bill.city || '-'}</span></div>
+              <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${supplierName}</span></div>
+              <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${supplierAddress}</span></div>
+              <div class="field-row"><span class="field-label">Contact Person:</span><span class="field-value">${supplierContact}</span></div>
+              <div class="field-row"><span class="field-label">Phone:</span><span class="field-value">${supplierPhone}</span></div>
+              <div class="field-row"><span class="field-label">Email:</span><span class="field-value">${supplierEmail}</span></div>
             </div>
           </div>
 
@@ -220,11 +208,10 @@ export default function PurchaseBills() {
             <thead>
               <tr>
                 <th style="width: 5%">SI</th>
-                <th style="width: 40%">Description of Goods</th>
-                <th style="width: 10%">HSN/SAC</th>
-                <th style="width: 10%">Quantity</th>
-                <th style="width: 10%">Rate</th>
-                <th style="width: 10%">per</th>
+                <th style="width: 48%">Description of Goods</th>
+                <th style="width: 12%">Quantity</th>
+                <th style="width: 12%">Rate</th>
+                <th style="width: 8%">per</th>
                 <th style="width: 15%">Amount</th>
               </tr>
             </thead>
@@ -233,7 +220,6 @@ export default function PurchaseBills() {
                 <tr>
                   <td class="center">${i + 1}</td>
                   <td>${l.name}</td>
-                  <td class="center">${l.hsn_code || '-'}</td>
                   <td class="right">${qty(l.qty)}</td>
                   <td class="right">${inr(l.rate)}</td>
                   <td class="center">${l.unit}</td>
@@ -243,65 +229,24 @@ export default function PurchaseBills() {
               <tr>
                 <td colspan="2" class="right" style="font-weight: bold;">Total Quantity:</td>
                 <td colspan="2" class="right" style="font-weight: bold;">${qty(totalQty, 'kg')}</td>
-                <td colspan="3"></td>
+                <td colspan="2"></td>
               </tr>
             </tbody>
           </table>
 
           <div class="summary-section">
             <div class="summary-row"><span>Subtotal:</span><span>${inr(bill.subtotal)}</span></div>
-            <div class="summary-row"><span>CGST:</span><span>${inr(cgst)}</span></div>
-            <div class="summary-row"><span>SGST:</span><span>${inr(sgst)}</span></div>
-            <div class="summary-row"><span>R Off:</span><span>0.00</span></div>
+            <div class="summary-row"><span>Loading Amount:</span><span>${inr(bill.loading_amount)}</span></div>
+            <div class="summary-row"><span>Unloading Amount:</span><span>${inr(bill.unloading_amount)}</span></div>
+            <div class="summary-row"><span>Freight Amount:</span><span>${inr(bill.freight_amount)}</span></div>
+            <div class="summary-row"><span>Total KG:</span><span>${bill.total_kg}</span></div>
+            <div class="summary-row"><span>Discount:</span><span>${inr(bill.discount)}</span></div>
             <div class="summary-row" style="font-weight: bold; margin-top: 4px;"><span>Total:</span><span>${inr(bill.total)}</span></div>
             <div style="margin-top: 4px; font-style: italic;">E. & O.E</div>
           </div>
 
           <div class="amount-words">
             <strong>Amount Chargeable (in words):</strong> ${amountInWords(bill.total)}
-          </div>
-
-          <div class="summary-section">
-            <div class="section-title">HSN/SAC Tax Summary</div>
-            <table class="tax-summary-table">
-              <thead>
-                <tr>
-                  <th>HSN/SAC</th>
-                  <th>Taxable Value</th>
-                  <th>CGST Rate</th>
-                  <th>CGST Amount</th>
-                  <th>SGST/UTGST Rate</th>
-                  <th>SGST/UTGST Amount</th>
-                  <th>Total Tax Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${Array.from(byHsn.entries()).map(([hsn, data]) => `
-                  <tr>
-                    <td class="center">${hsn}</td>
-                    <td class="right">${inr(data.taxable)}</td>
-                    <td class="center">${data.cgstRate}%</td>
-                    <td class="right">${inr(data.taxable * data.cgstRate / 100)}</td>
-                    <td class="center">${data.sgstRate}%</td>
-                    <td class="right">${inr(data.taxable * data.sgstRate / 100)}</td>
-                    <td class="right">${inr(data.taxable * (data.cgstRate + data.sgstRate) / 100)}</td>
-                  </tr>
-                `).join('')}
-                <tr style="font-weight: bold;">
-                  <td class="center">Total</td>
-                  <td class="right">${inr(bill.subtotal)}</td>
-                  <td></td>
-                  <td class="right">${inr(cgst)}</td>
-                  <td></td>
-                  <td class="right">${inr(sgst)}</td>
-                  <td class="right">${inr(bill.tax)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="amount-words">
-            <strong>Tax Amount (in words):</strong> ${amountInWords(bill.tax)}
           </div>
 
           <div class="bank-details">
@@ -354,6 +299,7 @@ export default function PurchaseBills() {
   }
 
   const total = bills.reduce((s, b) => s + b.total, 0)
+  const totalKg = bills.reduce((s, b) => s + (Number(b.total_kg) || 0), 0)
 
   return (
     <div>
@@ -389,19 +335,20 @@ export default function PurchaseBills() {
         <Table>
           <thead>
             <tr>
-              <Th className="w-8" /><Th>Date</Th><Th>Bill No</Th><Th>Supplier</Th><Th>Reference</Th>
+              <Th className="w-8" /><Th>Date</Th><Th>Entry Time</Th><Th>Bill No</Th><Th>Supplier</Th><Th>Reference</Th>
               <Th>Items</Th><Th right>Subtotal</Th><Th right>Total</Th><Th right>Actions</Th>
             </tr>
           </thead>
           <tbody>
             {bills.length === 0 ? (
-              <EmptyRow cols={9} text="No purchase bills found" />
+              <EmptyRow cols={10} text="No purchase bills found" />
             ) : bills.map((b) => {
               return (
               <Fragment key={b.id}>
                 <Tr onClick={() => handleExpand(b.id)} className="cursor-pointer hover:bg-slate-50">
                   <Td><ChevronRight size={16} className={cx('transition-transform', expanded === b.id && 'rotate-90')} /></Td>
                   <Td>{fmtDate(b.date)}</Td>
+                  <Td className="whitespace-nowrap text-slate-600">{fmtDateTime(b.created_at)}</Td>
                   <Td><Badge>{b.bill_no}</Badge></Td>
                   <Td>{b.supplier_name}</Td>
                   <Td>{b.reference || '-'}</Td>
@@ -424,7 +371,7 @@ export default function PurchaseBills() {
                 </Tr>
                 {expanded === b.id && b.lines && (
                   <tr className="bg-slate-50">
-                    <td colSpan={9} className="p-4">
+                    <td colSpan={10} className="p-4">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="text-slate-500">
@@ -448,12 +395,6 @@ export default function PurchaseBills() {
                               </tr>
                             )
                           })}
-                          {b.tax > 0 && (
-                            <tr className="border-t border-slate-200">
-                              <td colSpan={4} className="py-2 text-right font-medium">Tax</td>
-                              <td className="py-2 text-right">{inr(b.tax)}</td>
-                            </tr>
-                          )}
                           {b.discount > 0 && (
                             <tr className="border-t border-slate-200">
                               <td colSpan={4} className="py-2 text-right font-medium">Discount</td>
@@ -461,7 +402,7 @@ export default function PurchaseBills() {
                             </tr>
                           )}
                           <tr className="border-t-2 border-slate-300">
-                            <td colSpan={4} className="py-2 text-right font-semibold">Total</td>
+                            <td colSpan={4} className="py-2 text-right font-semibold">Net Total</td>
                             <td className="py-2 text-right font-semibold">{inr(b.total)}</td>
                           </tr>
                         </tbody>
@@ -475,7 +416,9 @@ export default function PurchaseBills() {
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
-              <td colSpan={7} className="px-4 py-3 text-right">Total</td>
+              <td colSpan={6} className="px-4 py-3 text-right">Total KG</td>
+              <td className="px-4 py-3 text-right tabular-nums">{qty(totalKg, 'kg')}</td>
+              <td className="px-4 py-3 text-right">Total Amount</td>
               <td className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
               <td />
             </tr>
@@ -506,14 +449,17 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   const [supplierId, setSupplierId] = useState<number | null>(bill?.supplier_id || null)
   const [reference, setReference] = useState(bill?.reference || '')
   const [note, setNote] = useState(bill?.note || '')
-  const [tax, setTax] = useState(bill?.tax || 0)
   const [discount, setDiscount] = useState(bill?.discount || 0)
+  const [loadingAmount, setLoadingAmount] = useState(bill?.loading_amount || 0)
+  const [unloadingAmount, setUnloadingAmount] = useState(bill?.unloading_amount || 0)
+  const [freightAmount, setFreightAmount] = useState(bill?.freight_amount || 0)
   const [lines, setLines] = useState<PurchaseBillLine[]>(
     bill?.lines?.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate, amount: l.amount })) || [{ item_id: 0, qty: 0, rate: 0, amount: 0 }]
   )
 
   const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
-  const total = subtotal + tax - discount
+  const totalKg = lines.reduce((s, l) => s + l.qty, 0)
+  const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount
 
   const updateLine = (index: number, field: keyof PurchaseBillLine, value: number | null) => {
     const newLines = [...lines]
@@ -537,8 +483,8 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supplierId) return notify('Please select a supplier', 'error')
-    if (lines.some((l) => !l.item_id || l.qty <= 0 || l.rate < 0)) {
-      return notify('Please fill all line items with valid values', 'error')
+    if (lines.some((l) => !l.item_id || Number(l.qty) <= 0 || Number(l.rate) < 0)) {
+      return notify('Each purchase row must have a valid item, quantity greater than zero, and a non-negative rate.', 'error')
     }
     setBusy(true)
     try {
@@ -548,8 +494,12 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
         supplier_id: supplierId,
         reference,
         note,
-        tax,
+        tax: 0,
         discount,
+        loading_amount: loadingAmount,
+        unloading_amount: unloadingAmount,
+        freight_amount: freightAmount,
+        total_kg: totalKg,
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
       if (bill) {
@@ -597,52 +547,90 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
             <span className="font-semibold">Items</span>
             <Button size="sm" variant="ghost" onClick={addLine}><Plus size={14} /> Add Item</Button>
           </div>
-          {lines.map((l, i) => {
-            const item = items.find(it => it.id === l.item_id)
-            return (
-            <div key={i} className="mb-3 grid grid-cols-12 gap-2 items-end">
-              <div className="col-span-5">
-                <SearchSelect
-                  placeholder="Select item"
-                  value={l.item_id || null}
-                  onChange={(v) => updateLine(i, 'item_id', v as number)}
-                  options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
-                />
-                {item && (
-                  <div className="mt-1 text-xs text-slate-500">
-                    Current Stock: {qty(item.stock)} {item.unit}
-                  </div>
-                )}
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
-              </div>
-              <div className="col-span-2">
-                <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
-              </div>
-              <div className="col-span-2 text-right">
-                <span className="text-sm font-medium">{inr(l.amount)}</span>
-              </div>
-              <div className="col-span-1">
-                {lines.length > 1 && (
-                  <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
-                )}
-              </div>
+
+          <div className="overflow-visible rounded-xl border border-slate-200 bg-slate-50">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-100 text-left text-slate-600">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Item</th>
+                  <th className="px-3 py-2 font-medium">Qty</th>
+                  <th className="px-3 py-2 font-medium">Rate</th>
+                  <th className="px-3 py-2 text-right font-medium">Amount</th>
+                  <th className="w-12 px-3 py-2 text-center font-medium"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l, i) => {
+                  const item = items.find(it => it.id === l.item_id)
+                  return (
+                    <tr key={i} className="border-t border-slate-200 align-top">
+                      <td className="px-3 py-3">
+                        <SearchSelect
+                          placeholder="Select item"
+                          value={l.item_id || null}
+                          onChange={(v) => updateLine(i, 'item_id', v as number)}
+                          options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
+                        />
+                        {item && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            Current Stock: {qty(item.stock)} {item.unit}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
+                      </td>
+                      <td className="px-3 py-3">
+                        <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
+                      </td>
+                      <td className="px-3 py-3 text-right align-middle font-medium text-slate-900">
+                        {inr(l.amount)}
+                      </td>
+                      <td className="px-3 py-3 text-center align-middle">
+                        {lines.length > 1 && (
+                          <Button size="sm" variant="danger" onClick={() => removeLine(i)}><Trash2 size={14} /></Button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-3 flex flex-col items-end gap-1 border-t border-slate-200 pt-3 text-sm text-slate-600">
+            <div>
+              <span className="mr-2 text-slate-500">Total KG:</span>
+              <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
             </div>
-            )
-          })}
+            <div>
+              <span className="mr-2 text-slate-500">Total Amount:</span>
+              <span className="font-semibold text-slate-900">{inr(subtotal)}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="border-t border-slate-200 pt-4 grid grid-cols-3 gap-4">
-          <Field label="Tax">
-            <Input type="number" step="0.01" value={tax || ''} onChange={(e) => setTax(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <Field label="Discount">
-            <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
-          </Field>
-          <div className="flex flex-col justify-end">
-            <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
-            <div className="text-lg font-bold">{inr(total)}</div>
+        <div className="border-t border-slate-200 pt-4">
+          <div className="mb-3 font-semibold">Expenses</div>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <Field label="Loading Amount">
+              <Input type="number" step="0.01" value={loadingAmount || ''} onChange={(e) => setLoadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Unloading Amount">
+              <Input type="number" step="0.01" value={unloadingAmount || ''} onChange={(e) => setUnloadingAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <Field label="Freight Amount">
+              <Input type="number" step="0.01" value={freightAmount || ''} onChange={(e) => setFreightAmount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Discount">
+              <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <div className="flex flex-col justify-end">
+              <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
+              <div className="text-lg font-bold">{inr(total)}</div>
+            </div>
           </div>
         </div>
 
