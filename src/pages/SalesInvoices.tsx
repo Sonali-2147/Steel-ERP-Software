@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, FileText, Plus, Printer, Trash2 } from 'lucide-react'
+import { ChevronRight, Download, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
@@ -358,8 +358,11 @@ export default function SalesInvoices() {
                   <Td right className="font-semibold">{inr(inv.total)}</Td>
                   <Td right>
                     <div className="flex justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); printInvoice(inv) }}>
+                      <Button size="sm" variant="ghost" title="Print" onClick={(e) => { e.stopPropagation(); printInvoice(inv) }}>
                         <Printer size={14} />
+                      </Button>
+                      <Button size="sm" variant="ghost" title="Download PDF" onClick={(e) => { e.stopPropagation(); window.print() }}>
+                        <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(inv); setFormOpen(true) }}>
                         <FileText size={14} />

@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { clientItems } from './client_items.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data')
+const fallbackDataDir = process.env.RENDER ? '/data' : path.join(__dirname, 'data')
+const dataDir = process.env.DATA_DIR || fallbackDataDir
 fs.mkdirSync(dataDir, { recursive: true })
 
 export const db = new DatabaseSync(path.join(dataDir, 'erp.db'))
@@ -249,7 +250,16 @@ function seedCatalog() {
 }
 
 export function seedDemoData() {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = () => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date())
+    const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]))
+    return `${map.year}-${map.month}-${map.day}`
+  }
   const itemRows = db.prepare('SELECT id, code, name, unit, purchase_rate, sale_rate FROM items ORDER BY id LIMIT 5').all()
   if (itemRows.length < 2) return
 

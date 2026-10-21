@@ -205,6 +205,7 @@ function Toolbar({ children, onExport }: { children?: React.ReactNode; onExport:
       <div className="flex gap-2 md:ml-auto">
         <Button variant="secondary" onClick={onExport}><Download size={16} /> Export</Button>
         <Button variant="secondary" onClick={() => window.print()}><Printer size={16} /> Print</Button>
+        <Button variant="secondary" onClick={() => window.print()}><Download size={16} /> PDF</Button>
       </div>
     </div>
   )

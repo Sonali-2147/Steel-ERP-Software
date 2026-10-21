@@ -212,6 +212,7 @@ export default function Payments({ type: fixedType }: { type?: 'IN' | 'OUT' }) {
                 <Td right>
                   <div className="flex justify-end gap-1">
                     <Button size="sm" variant="ghost" title="Print" onClick={() => printPayment(p)}><Printer size={14} /></Button>
+                    <Button size="sm" variant="ghost" title="Download PDF" onClick={() => window.print()}><Download size={14} /></Button>
                     <Button size="sm" variant="ghost" title="Edit" onClick={() => { setEditing(p); setFormOpen(true) }}><Pencil size={14} /></Button>
                     <Button size="sm" variant="ghost" title="Delete" className="text-red-600" onClick={() => remove(p)}><Trash2 size={14} /></Button>
                   </div>

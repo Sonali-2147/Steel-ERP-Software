@@ -81,9 +81,10 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
 }
 
 /* ---------- Form controls ---------- */
-const field = 'w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 transition-colors hover:border-slate-300 focus:border-steel-500 focus:outline-none focus:ring-2 focus:ring-steel-500/20 disabled:bg-slate-50'
+const field = 'w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 placeholder:text-slate-400 transition-all duration-150 hover:border-slate-300 focus:border-steel-500 focus:outline-none focus:ring-2 focus:ring-steel-500/20 disabled:bg-slate-50'
 export function Input(p: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...p} className={cx(field, 'h-9', p.className)} />
+  const isDateInput = p.type === 'date'
+  return <input {...p} className={cx(field, 'h-9', isDateInput && 'date-picker cursor-pointer appearance-none', p.className)} />
 }
 export function Select({ children, ...p }: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...p} className={cx(field, 'h-9 pr-8', p.className)}>{children}</select>

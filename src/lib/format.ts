@@ -10,21 +10,47 @@ export const inrCompact = (n: number) => {
 export const qty = (n: number, unit?: string) =>
   `${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${unit ? ' ' + unit : ''}`
 
+const IST_TIMEZONE = 'Asia/Kolkata'
+
+const parseDateForDisplay = (iso: string) => {
+  if (!iso) return new Date(NaN)
+  const value = String(iso).trim()
+  if (!value) return new Date(NaN)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T00:00:00+05:30`)
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return new Date(value)
+  return new Date(`${value}+05:30`)
+}
+
 export const todayISO = () => {
   const d = new Date()
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d)
+  const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]))
+  return `${map.year}-${map.month}-${map.day}`
 }
 
 export const monthStartISO = () => todayISO().slice(0, 8) + '01'
 
-export const fmtDate = (iso: string) =>
-  iso ? new Date(iso + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''
+export const fmtDate = (iso: string) => {
+  const d = parseDateForDisplay(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-IN', {
+    timeZone: IST_TIMEZONE,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
 
 export const fmtDateTime = (iso: string) => {
-  if (!iso) return ''
-  const d = new Date(iso)
+  const d = parseDateForDisplay(iso)
   if (Number.isNaN(d.getTime())) return ''
   return d.toLocaleString('en-IN', {
+    timeZone: IST_TIMEZONE,
     day: '2-digit',
     month: 'short',
     year: 'numeric',

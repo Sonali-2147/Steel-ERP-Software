@@ -32,7 +32,17 @@ const route = (fn) => (req, res) => {
   }
 }
 
-const today = () => new Date().toISOString().slice(0, 10)
+const IST_TIMEZONE = 'Asia/Kolkata'
+const today = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: IST_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const map = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]))
+  return `${map.year}-${map.month}-${map.day}`
+}
 const num = (v) => {
   const n = Number(String(v ?? '').replace(/,/g, '').trim())
   return Number.isFinite(n) ? n : 0

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, IndianRupee, Package, Plus, Upload } from 'lucide-react'
 import { Badge, Button, Card, CardHeader, EmptyRow, PageHeader, StatCard, Table, Td, Th, Tr } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, fmtDateTime, inr, inrCompact, qty } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, inrCompact, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Dashboard as DashboardData } from '@/lib/types'
 
@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const loadDayBook = () => {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = todayISO()
       Promise.all([
         api.getPurchaseBills({ from: today, to: today }),
         api.getSalesInvoices({ from: today, to: today }),

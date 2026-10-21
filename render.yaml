@@ -7,6 +7,8 @@ services:
     envVars:
       - key: ADMIN_PASSWORD
         generateValue: true
+      - key: DATA_DIR
+        value: /data
     disk:
       name: data
       mountPath: /data
