@@ -5,9 +5,39 @@ import { fileURLToPath } from 'node:url'
 import { clientItems } from './client_items.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const fallbackDataDir = process.env.RENDER ? '/data' : path.join(__dirname, 'data')
-const dataDir = process.env.DATA_DIR || fallbackDataDir
-fs.mkdirSync(dataDir, { recursive: true })
+const preferredDataDirs = [
+  process.env.DATA_DIR,
+  process.env.RENDER ? '/data' : undefined,
+  path.join(__dirname, 'data'),
+  path.join(process.cwd(), 'server', 'data'),
+  path.join(process.cwd(), 'data'),
+  '/tmp/steel-erp-data',
+].filter(Boolean)
+
+function resolveDataDir() {
+  for (const candidate of preferredDataDirs) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true })
+      const probeFile = path.join(candidate, '.write-test')
+      fs.writeFileSync(probeFile, 'ok')
+      fs.unlinkSync(probeFile)
+      return candidate
+    } catch {
+      // fall through to the next writable candidate
+    }
+  }
+
+  const fallbackDir = path.join(__dirname, 'data')
+  fs.mkdirSync(fallbackDir, { recursive: true })
+  return fallbackDir
+}
+
+const dataDir = resolveDataDir()
+if (process.env.DATA_DIR && dataDir !== process.env.DATA_DIR) {
+  console.warn(`DATA_DIR ${process.env.DATA_DIR} is not writable; using ${dataDir} instead.`)
+} else if (process.env.RENDER && dataDir !== '/data') {
+  console.warn(`Render data directory /data is not writable; using ${dataDir} instead.`)
+}
 
 export const db = new DatabaseSync(path.join(dataDir, 'erp.db'))
 db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;')
