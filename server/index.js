@@ -95,6 +95,13 @@ function nextQuotationNo() {
   return `QT-${String(max + 1).padStart(4, '0')}`
 }
 
+function nextPaymentVoucherNo(type) {
+  const prefix = type === 'IN' ? 'PAYIN-' : 'POUT-'
+  const rows = db.prepare('SELECT voucher_no FROM payments WHERE type = ?').all(type)
+  const max = rows.reduce((m, r) => Math.max(m, parseInt(r.voucher_no.slice(prefix.length), 10) || 0), 0)
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
+}
+
 // ------------------------------------------------------------------
 // Health
 // ------------------------------------------------------------------
@@ -906,10 +913,161 @@ app.put('/api/quotations/:id', route((req) => {
 }))
 
 app.delete('/api/quotations/:id', route((req) => {
-  const quotation = db.prepare('SELECT id FROM quotations WHERE id = ?').get(Number(req.params.id))
+  const quotationId = Number(req.params.id)
+  const quotation = db.prepare('SELECT id, quotation_no, supplier_id FROM quotations WHERE id = ?').get(quotationId)
   if (!quotation) throw new HttpError(404, 'Quotation not found')
-  db.prepare('DELETE FROM quotations WHERE id = ?').run(quotation.id)
+
+  return transaction(() => {
+    db.prepare('DELETE FROM quotations WHERE id = ?').run(quotationId)
+  })
   return { success: true }
+}))
+
+// ------------------------------------------------------------------
+// Payments
+// ------------------------------------------------------------------
+
+app.get('/api/payments', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.type) { cond.push('p.type = ?'); params.push(req.query.type) }
+  if (req.query.from) { cond.push('p.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('p.date <= ?'); params.push(req.query.to) }
+  if (req.query.party_id) { cond.push('p.party_id = ?'); params.push(Number(req.query.party_id)) }
+
+  const payments = db.prepare(`
+    SELECT p.*, party.name AS party_name
+    FROM payments p LEFT JOIN parties party ON party.id = p.party_id
+    ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+    ORDER BY p.date DESC, p.id DESC
+  `).all(...params)
+  return payments
+}))
+
+app.get('/api/payments/:id', route((req) => {
+  const payment = db.prepare(`
+    SELECT p.*, party.name AS party_name
+    FROM payments p LEFT JOIN parties party ON party.id = p.party_id
+    WHERE p.id = ?
+  `).get(Number(req.params.id))
+  if (!payment) throw new HttpError(404, 'Payment not found')
+  return payment
+}))
+
+app.post('/api/payments', route((req) => {
+  const body = req.body
+  const type = body.type
+  if (type !== 'IN' && type !== 'OUT') throw new HttpError(400, 'Invalid payment type')
+  if (!body.amount || body.amount <= 0) throw new HttpError(400, 'Amount must be greater than zero')
+  if (!body.mode || !['cash', 'bank_transfer', 'cheque', 'upi', 'card', 'other'].includes(body.mode)) {
+    throw new HttpError(400, 'Invalid payment mode')
+  }
+
+  const voucherNo = body.voucher_no || nextPaymentVoucherNo(type)
+
+  const r = db.prepare(`
+    INSERT INTO payments (voucher_no, type, date, party_id, amount, mode, reference_no, bank_name, cheque_no, cheque_date, note, purchase_bill_id, sales_invoice_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    voucherNo,
+    type,
+    str(body.date) || today(),
+    body.party_id ? Number(body.party_id) : null,
+    num(body.amount),
+    body.mode,
+    str(body.reference_no),
+    str(body.bank_name),
+    str(body.cheque_no),
+    str(body.cheque_date),
+    str(body.note),
+    body.purchase_bill_id ? Number(body.purchase_bill_id) : null,
+    body.sales_invoice_id ? Number(body.sales_invoice_id) : null
+  )
+
+  return db.prepare('SELECT * FROM payments WHERE id = ?').get(Number(r.lastInsertRowid))
+}))
+
+app.put('/api/payments/:id', route((req) => {
+  const id = Number(req.params.id)
+  const existing = db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
+  if (!existing) throw new HttpError(404, 'Payment not found')
+
+  const body = req.body
+  if (body.amount !== undefined && body.amount <= 0) throw new HttpError(400, 'Amount must be greater than zero')
+  if (body.mode && !['cash', 'bank_transfer', 'cheque', 'upi', 'card', 'other'].includes(body.mode)) {
+    throw new HttpError(400, 'Invalid payment mode')
+  }
+
+  db.prepare(`
+    UPDATE payments SET
+      date = ?,
+      party_id = ?,
+      amount = ?,
+      mode = ?,
+      reference_no = ?,
+      bank_name = ?,
+      cheque_no = ?,
+      cheque_date = ?,
+      note = ?,
+      purchase_bill_id = ?,
+      sales_invoice_id = ?
+    WHERE id = ?
+  `).run(
+    str(body.date) || existing.date,
+    body.party_id !== undefined ? Number(body.party_id) : existing.party_id,
+    body.amount !== undefined ? num(body.amount) : existing.amount,
+    body.mode || existing.mode,
+    str(body.reference_no),
+    str(body.bank_name),
+    str(body.cheque_no),
+    str(body.cheque_date),
+    str(body.note),
+    body.purchase_bill_id !== undefined ? Number(body.purchase_bill_id) : existing.purchase_bill_id,
+    body.sales_invoice_id !== undefined ? Number(body.sales_invoice_id) : existing.sales_invoice_id,
+    id
+  )
+
+  return db.prepare('SELECT * FROM payments WHERE id = ?').get(id)
+}))
+
+app.delete('/api/payments/:id', route((req) => {
+  const id = Number(req.params.id)
+  const payment = db.prepare('SELECT id FROM payments WHERE id = ?').get(id)
+  if (!payment) throw new HttpError(404, 'Payment not found')
+  db.prepare('DELETE FROM payments WHERE id = ?').run(id)
+  return { success: true }
+}))
+
+// ------------------------------------------------------------------
+// Payment Reports
+// ------------------------------------------------------------------
+
+app.get('/api/reports/payment-in-register', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('p.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('p.date <= ?'); params.push(req.query.to) }
+  if (req.query.party_id) { cond.push('p.party_id = ?'); params.push(Number(req.query.party_id)) }
+  return db.prepare(`
+    SELECT p.voucher_no, p.date, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
+    FROM payments p LEFT JOIN parties party ON party.id = p.party_id
+    WHERE p.type = 'IN' ${cond.length ? 'AND ' + cond.join(' AND ') : ''}
+    ORDER BY p.date DESC, p.id DESC
+  `).all(...params)
+}))
+
+app.get('/api/reports/payment-out-register', route((req) => {
+  const cond = []
+  const params = []
+  if (req.query.from) { cond.push('p.date >= ?'); params.push(req.query.from) }
+  if (req.query.to) { cond.push('p.date <= ?'); params.push(req.query.to) }
+  if (req.query.party_id) { cond.push('p.party_id = ?'); params.push(Number(req.query.party_id)) }
+  return db.prepare(`
+    SELECT p.voucher_no, p.date, p.party_id, party.name AS party_name, p.amount, p.mode, p.reference_no, p.bank_name, p.note
+    FROM payments p LEFT JOIN parties party ON party.id = p.party_id
+    WHERE p.type = 'OUT' ${cond.length ? 'AND ' + cond.join(' AND ') : ''}
+    ORDER BY p.date DESC, p.id DESC
+  `).all(...params)
 }))
 
 // ------------------------------------------------------------------

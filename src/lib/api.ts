@@ -1,6 +1,6 @@
 import type {
   Dashboard, Entry, EntryInput, EntryType, ImportResult, Item, ItemInput, ItemLedger,
-  Party, PartyInput, PartyType, PurchaseBill, PurchaseBillInput, Quotation, QuotationInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
+  Party, PartyInput, PartyType, Payment, PaymentInput, PurchaseBill, PurchaseBillInput, Quotation, QuotationInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
 } from './types'
 
 const TOKEN_KEY = 'erp_token'
@@ -108,4 +108,16 @@ export const api = {
   createQuotation: (quotation: QuotationInput) => request<{ id: number; quotation_no: string }>('/api/quotations', send('POST', quotation)),
   updateQuotation: (id: number, quotation: QuotationInput) => request<{ success: boolean }>(`/api/quotations/${id}`, send('PUT', quotation)),
   deleteQuotation: (id: number) => request<{ success: boolean }>(`/api/quotations/${id}`, send('DELETE')),
+
+  getPayments: (params?: { type?: 'IN' | 'OUT'; from?: string; to?: string; party_id?: number }) =>
+    request<Payment[]>(`/api/payments${qs(params || {})}`),
+  getPayment: (id: number) => request<Payment>(`/api/payments/${id}`),
+  createPayment: (payment: PaymentInput) => request<Payment>('/api/payments', send('POST', payment)),
+  updatePayment: (id: number, payment: PaymentInput) => request<Payment>(`/api/payments/${id}`, send('PUT', payment)),
+  deletePayment: (id: number) => request<{ success: boolean }>(`/api/payments/${id}`, send('DELETE')),
+
+  paymentInRegister: (params?: { from?: string; to?: string; party_id?: number }) =>
+    request<any[]>(`/api/reports/payment-in-register${qs(params || {})}`),
+  paymentOutRegister: (params?: { from?: string; to?: string; party_id?: number }) =>
+    request<any[]>(`/api/reports/payment-out-register${qs(params || {})}`),
 }

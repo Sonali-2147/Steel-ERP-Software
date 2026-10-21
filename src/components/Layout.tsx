@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
-  ArrowDownToLine, ArrowUpFromLine, BarChart3, ChevronDown, ChevronLeft, ChevronRight, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Quote, Receipt, Truck, Users, X,
+  ArrowDownToLine, ArrowUpFromLine, BarChart3, ChevronDown, ChevronLeft, ChevronRight, DollarSign, FileText, KeyRound, LayoutDashboard, LogOut, Menu, Package, Quote, Receipt, Truck, Users, X,
 } from 'lucide-react'
 import { Button, cx, Field, Input, Modal, Toaster } from './ui'
 import { api } from '@/lib/api'
@@ -37,6 +37,15 @@ const NAV = [
     children: [
       { to: '/customers', label: 'Customers', icon: Users },
       { to: '/sales-invoices', label: 'Sales Invoices', icon: FileText },
+    ],
+  },
+  {
+    label: 'Accounts',
+    icon: DollarSign,
+    color: 'from-orange-400 to-orange-500',
+    children: [
+      { to: '/payment-in', label: 'Payment In', icon: ArrowDownToLine },
+      { to: '/payment-out', label: 'Payment Out', icon: ArrowUpFromLine },
     ],
   },
   { to: '/reports', label: 'Reports', icon: BarChart3, color: 'from-orange-400 to-orange-500' },
@@ -116,7 +125,7 @@ function ChangePassword({ onClose }: { onClose: () => void }) {
 }
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['Stock', 'Buying', 'Selling']))
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set(['Stock', 'Buying', 'Selling', 'Accounts']))
   const [collapsed, setCollapsed] = useState(false)
   const { pathname } = useLocation()
 

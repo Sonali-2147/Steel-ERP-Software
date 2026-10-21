@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from './api'
-import type { Item, Party } from './types'
+import type { Item, Party, PurchaseBill, SalesInvoice } from './types'
 
 export interface Toast {
   id: number
@@ -12,6 +12,8 @@ interface Store {
   items: Item[]
   suppliers: Party[]
   customers: Party[]
+  purchaseBills: PurchaseBill[]
+  salesInvoices: SalesInvoice[]
   loading: boolean
   connected: boolean
   toasts: Toast[]
@@ -26,6 +28,8 @@ let toastId = 0
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<Item[]>([])
   const [parties, setParties] = useState<Party[]>([])
+  const [purchaseBills, setPurchaseBills] = useState<PurchaseBill[]>([])
+  const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>([])
   const [loading, setLoading] = useState(true)
   const [connected, setConnected] = useState(true)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -40,9 +44,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const [i, p] = await Promise.all([api.getItems(), api.getParties()])
+      const [i, p, pb, si] = await Promise.all([api.getItems(), api.getParties(), api.getPurchaseBills(), api.getSalesInvoices()])
       setItems(i)
       setParties(p)
+      setPurchaseBills(pb)
+      setSalesInvoices(si)
       setConnected(true)
     } catch {
       setConnected(false)
@@ -59,13 +65,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     items,
     suppliers: parties.filter((p) => p.type === 'supplier'),
     customers: parties.filter((p) => p.type === 'customer'),
+    purchaseBills,
+    salesInvoices,
     loading,
     connected,
     toasts,
     refresh,
     notify,
     dismissToast,
-  }), [items, parties, loading, connected, toasts, refresh, notify, dismissToast])
+  }), [items, parties, purchaseBills, salesInvoices, loading, connected, toasts, refresh, notify, dismissToast])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

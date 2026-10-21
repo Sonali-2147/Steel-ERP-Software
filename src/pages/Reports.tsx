@@ -19,6 +19,8 @@ const TABS = [
   { id: 'out', label: 'Stock Out Register', desc: 'Material dispatched', icon: ArrowUpFromLine, tone: 'red' },
   { id: 'purchase', label: 'Purchase Register', desc: 'Purchase bills summary', icon: Receipt, tone: 'emerald' },
   { id: 'sales', label: 'Sales Register', desc: 'Sales invoices summary', icon: FileText, tone: 'orange' },
+  { id: 'payment-in', label: 'Payment In Register', desc: 'Payments received', icon: ArrowDownToLine, tone: 'green' },
+  { id: 'payment-out', label: 'Payment Out Register', desc: 'Payments made', icon: ArrowUpFromLine, tone: 'red' },
   { id: 'low', label: 'Low Stock', desc: 'Items to reorder', icon: AlertTriangle, tone: 'amber' },
 ] as const
 
@@ -80,6 +82,8 @@ export default function Reports() {
       {tab === 'out' && <Register key="OUT" type="OUT" />}
       {tab === 'purchase' && <PurchaseRegister />}
       {tab === 'sales' && <SalesRegister />}
+      {tab === 'payment-in' && <PaymentRegister key="IN" type="IN" />}
+      {tab === 'payment-out' && <PaymentRegister key="OUT" type="OUT" />}
       {tab === 'low' && <LowStock />}
     </div>
   )
@@ -534,6 +538,82 @@ function SalesRegister() {
             <tr>
               <td colSpan={7} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Total</td>
               <td className="px-4 py-3 text-right text-sm font-semibold">{inr(total)}</td>
+            </tr>
+          </tfoot>
+        )}
+      </Table>
+    </Card>
+    </div>
+  )
+}
+
+function PaymentRegister({ type }: { type: 'IN' | 'OUT' }) {
+  const { suppliers, customers, notify } = useStore()
+  const isIn = type === 'IN'
+  const parties = isIn ? customers : suppliers
+  const [from, setFrom] = useState(monthStartISO())
+  const [to, setTo] = useState(todayISO())
+  const [partyId, setPartyId] = useState<number | null>(null)
+  const [rows, setRows] = useState<any[]>([])
+
+  useEffect(() => {
+    const apiFn = isIn ? api.paymentInRegister : api.paymentOutRegister
+    apiFn({ from, to, party_id: partyId ?? undefined })
+      .then(setRows).catch((e) => notify(e.message, 'error'))
+  }, [type, from, to, partyId, notify])
+
+  const total = rows.reduce((s, r) => s + r.amount, 0)
+  const partyLabel = isIn ? 'Customer' : 'Supplier'
+
+  const exportCSV = () => downloadCSV(`payment-${type.toLowerCase()}-register-${from}-to-${to}.csv`, rows.map((r) => ({
+    Date: r.date, 'Voucher No': r.voucher_no, [partyLabel]: r.party_name || '', Mode: r.mode,
+    'Reference No': r.reference_no || '', 'Bank Name': r.bank_name || '', Amount: r.amount, Note: r.note || '',
+  })))
+
+  const voucherCount = rows.length
+  const partyCount = new Set(rows.map((r) => r.party_name).filter(Boolean)).size
+
+  return (
+    <div className="space-y-5">
+    <Kpis items={[
+      { label: 'Vouchers', value: String(voucherCount), icon: FileText, tone: isIn ? 'green' : 'red' },
+      { label: 'Total Amount', value: inr(total), icon: IndianRupee, tone: 'blue' },
+      { label: isIn ? 'Customers' : 'Suppliers', value: String(partyCount), icon: Users, tone: 'violet' },
+      { label: 'Avg Amount', value: inr(voucherCount > 0 ? total / voucherCount : 0), icon: Scale, tone: 'slate' },
+    ]} />
+    <Card>
+      <Toolbar onExport={exportCSV}>
+        <DateRange from={from} to={to} setFrom={setFrom} setTo={setTo} />
+        <Field label={partyLabel}>
+          <SearchSelect className="md:w-56" placeholder="All" value={partyId} onChange={setPartyId}
+            options={parties.map((p) => ({ value: p.id, label: p.name }))} />
+        </Field>
+      </Toolbar>
+      <PrintTitle title={`Payment ${isIn ? 'In' : 'Out'} Register`} sub={`${fmtDate(from)} to ${fmtDate(to)}`} />
+      <Table>
+        <thead>
+          <tr><Th>Date</Th><Th>Voucher No</Th><Th>{partyLabel}</Th><Th>Mode</Th><Th>Reference No</Th><Th>Bank Name</Th><Th right>Amount</Th><Th>Note</Th></tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && <EmptyRow cols={8} />}
+          {rows.map((r, idx) => (
+            <Tr key={idx}>
+              <Td className="whitespace-nowrap">{fmtDate(r.date)}</Td>
+              <Td className="font-medium">{r.voucher_no}</Td>
+              <Td>{r.party_name || '–'}</Td>
+              <Td className="capitalize">{r.mode.replace('_', ' ')}</Td>
+              <Td>{r.reference_no || '–'}</Td>
+              <Td>{r.bank_name || '–'}</Td>
+              <Td right className="font-semibold">{inr(r.amount)}</Td>
+              <Td className="text-xs text-slate-500">{r.note || '–'}</Td>
+            </Tr>
+          ))}
+        </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr>
+              <td colSpan={6} className="px-4 py-3 text-right text-sm font-medium text-slate-600">Total</td>
+              <td colSpan={2} className="px-4 py-3 text-right text-sm font-semibold">{inr(total)}</td>
             </tr>
           </tfoot>
         )}

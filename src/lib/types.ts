@@ -286,3 +286,41 @@ export interface QuotationInput {
 }
 
 export const UNITS = ['kg', 'MT', 'pcs', 'nos', 'm', 'ft', 'bundle', 'set']
+
+export type PaymentType = 'IN' | 'OUT'
+export type PaymentMode = 'cash' | 'bank_transfer' | 'cheque' | 'upi' | 'card' | 'other'
+
+export interface Payment {
+  id: number
+  voucher_no: string
+  type: PaymentType
+  date: string
+  party_id: number | null
+  amount: number
+  mode: PaymentMode
+  reference_no: string
+  bank_name: string
+  cheque_no: string
+  cheque_date: string
+  note: string
+  purchase_bill_id: number | null
+  sales_invoice_id: number | null
+  created_at: string
+  party_name?: string
+}
+
+export interface PaymentInput {
+  voucher_no?: string
+  type: PaymentType
+  date: string
+  party_id?: number
+  amount: number
+  mode: PaymentMode
+  reference_no?: string
+  bank_name?: string
+  cheque_no?: string
+  cheque_date?: string
+  note?: string
+  purchase_bill_id?: number
+  sales_invoice_id?: number
+}

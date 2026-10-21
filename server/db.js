@@ -149,6 +149,29 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_quotation_lines_item ON quotation_lines(item_id);
     CREATE INDEX IF NOT EXISTS idx_quotation_lines_quotation ON quotation_lines(quotation_id);
     CREATE INDEX IF NOT EXISTS idx_quotations_date ON quotations(date);
+
+    CREATE TABLE IF NOT EXISTS payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      voucher_no TEXT NOT NULL UNIQUE,
+      type TEXT NOT NULL CHECK (type IN ('IN', 'OUT')),
+      date TEXT NOT NULL,
+      party_id INTEGER REFERENCES parties(id),
+      amount REAL NOT NULL CHECK (amount > 0),
+      mode TEXT NOT NULL CHECK (mode IN ('cash', 'bank_transfer', 'cheque', 'upi', 'card', 'other')),
+      reference_no TEXT NOT NULL DEFAULT '',
+      bank_name TEXT NOT NULL DEFAULT '',
+      cheque_no TEXT NOT NULL DEFAULT '',
+      cheque_date TEXT NOT NULL DEFAULT '',
+      note TEXT NOT NULL DEFAULT '',
+      purchase_bill_id INTEGER REFERENCES purchase_bills(id),
+      sales_invoice_id INTEGER REFERENCES sales_invoices(id),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(date);
+    CREATE INDEX IF NOT EXISTS idx_payments_party ON payments(party_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_bill ON payments(purchase_bill_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_invoice ON payments(sales_invoice_id);
   `)
 
   const { c } = db.prepare('SELECT COUNT(*) AS c FROM items').get()
