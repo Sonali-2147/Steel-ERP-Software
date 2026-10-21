@@ -89,12 +89,14 @@ export const api = {
     request<PurchaseBill[]>(`/api/purchase-bills${qs(params || {})}`),
   getPurchaseBill: (id: number) => request<PurchaseBill>(`/api/purchase-bills/${id}`),
   createPurchaseBill: (bill: PurchaseBillInput) => request<PurchaseBill>('/api/purchase-bills', send('POST', bill)),
+  updatePurchaseBill: (id: number, bill: PurchaseBillInput) => request<{ success: boolean }>(`/api/purchase-bills/${id}`, send('PUT', bill)),
   deletePurchaseBill: (id: number) => request<{ success: boolean }>(`/api/purchase-bills/${id}`, send('DELETE')),
 
   getSalesInvoices: (params?: { from?: string; to?: string; customer_id?: number }) =>
     request<SalesInvoice[]>(`/api/sales-invoices${qs(params || {})}`),
   getSalesInvoice: (id: number) => request<SalesInvoice>(`/api/sales-invoices/${id}`),
   createSalesInvoice: (invoice: SalesInvoiceInput) => request<SalesInvoice>('/api/sales-invoices', send('POST', invoice)),
+  updateSalesInvoice: (id: number, invoice: SalesInvoiceInput) => request<{ success: boolean }>(`/api/sales-invoices/${id}`, send('PUT', invoice)),
   deleteSalesInvoice: (id: number) => request<{ success: boolean }>(`/api/sales-invoices/${id}`, send('DELETE')),
 
   purchaseRegister: (params?: { from?: string; to?: string; supplier_id?: number }) =>

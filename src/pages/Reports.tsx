@@ -133,20 +133,33 @@ function buildItemProfitRows(purchaseRows: any[], salesRows: any[], items: any[]
     const totalPurchaseValue = Number(row.purchase_value || 0)
     const totalSalesValue = Number(row.sales_value || 0)
 
-    let adjustedPurchaseValue = 0
-    if (purchaseQty > 0 && salesQty > 0) {
-      const matchedQty = Math.min(salesQty, purchaseQty)
-      adjustedPurchaseValue = totalPurchaseValue * (matchedQty / purchaseQty)
-    } else if (salesQty > 0) {
-      adjustedPurchaseValue = totalSalesValue
+    const matchedQty = purchaseQty > 0 && salesQty > 0 ? Math.min(purchaseQty, salesQty) : (purchaseQty > 0 ? purchaseQty : salesQty)
+
+    let matchedPurchaseValue = 0
+    let matchedSalesValue = 0
+
+    if (purchaseQty > 0 && matchedQty > 0) {
+      matchedPurchaseValue = totalPurchaseValue * (matchedQty / purchaseQty)
+    }
+    if (salesQty > 0 && matchedQty > 0) {
+      matchedSalesValue = totalSalesValue * (matchedQty / salesQty)
     }
 
-    adjustedPurchaseValue = Math.min(adjustedPurchaseValue, totalSalesValue)
+    if (purchaseQty === 0 && salesQty > 0) {
+      matchedPurchaseValue = totalSalesValue
+      matchedSalesValue = totalSalesValue
+    }
+
+    const showPurchaseQty = purchaseQty > 0 && salesQty > 0 ? matchedQty : purchaseQty
+    const showSalesQty = purchaseQty > 0 && salesQty > 0 ? matchedQty : salesQty
 
     return {
       ...row,
-      purchase_value: adjustedPurchaseValue,
-      profit_loss: totalSalesValue - adjustedPurchaseValue,
+      purchase_qty: showPurchaseQty,
+      sales_qty: showSalesQty,
+      purchase_value: matchedPurchaseValue,
+      sales_value: matchedSalesValue,
+      profit_loss: matchedSalesValue - matchedPurchaseValue,
     }
   }).sort((a, b) => Math.abs(b.profit_loss) - Math.abs(a.profit_loss))
 }

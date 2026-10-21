@@ -519,8 +519,7 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
       if (invoice) {
-        await api.deleteSalesInvoice(invoice.id)
-        await api.createSalesInvoice(input)
+        await api.updateSalesInvoice(invoice.id, input)
         notify('Sales invoice updated')
       } else {
         await api.createSalesInvoice(input)

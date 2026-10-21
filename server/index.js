@@ -715,7 +715,7 @@ app.post('/api/purchase-bills', route((req) => {
     const loading_amount = num(body.loading_amount)
     const unloading_amount = num(body.unloading_amount)
     const freight_amount = num(body.freight_amount)
-    const total_kg = body.lines.reduce((s, l) => s + num(l.qty), 0)
+    const total_kg = lines.reduce((s, l) => s + num(l.qty), 0)
     const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
 
     const info = db.prepare(`
@@ -737,6 +737,67 @@ app.post('/api/purchase-bills', route((req) => {
     createStockEntry('IN', str(body.date) || today(), Number(body.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
 
     return { id: info.lastInsertRowid, bill_no: billNo }
+  })
+}))
+
+app.put('/api/purchase-bills/:id', route((req) => {
+  const id = Number(req.params.id)
+  const existing = db.prepare('SELECT * FROM purchase_bills WHERE id = ?').get(id)
+  if (!existing) throw new HttpError(404, 'Purchase bill not found')
+  const body = req.body
+  const supplier = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.supplier_id ?? existing.supplier_id), 'supplier')
+  if (!supplier) throw new HttpError(400, 'Invalid supplier')
+  const lines = validateBillLines(body, 'item')
+
+  return transaction(() => {
+    const billNo = str(body.bill_no) || existing.bill_no
+    const date = str(body.date) || existing.date
+    const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
+    const tax = num(body.tax)
+    const discount = num(body.discount)
+    const loading_amount = num(body.loading_amount)
+    const unloading_amount = num(body.unloading_amount)
+    const freight_amount = num(body.freight_amount)
+    const total_kg = lines.reduce((s, l) => s + Number(l.qty), 0)
+    const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
+
+    db.prepare(`
+      UPDATE purchase_bills
+      SET bill_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, loading_amount = ?, unloading_amount = ?, freight_amount = ?, total_kg = ?, total = ?
+      WHERE id = ?
+    `).run(
+      billNo,
+      date,
+      Number(body.supplier_id ?? existing.supplier_id),
+      str(body.reference),
+      str(body.note),
+      subtotal,
+      tax,
+      discount,
+      loading_amount,
+      unloading_amount,
+      freight_amount,
+      total_kg,
+      total,
+      id
+    )
+
+    db.prepare('DELETE FROM purchase_bill_lines WHERE bill_id = ?').run(id)
+    const insertLine = db.prepare(`
+      INSERT INTO purchase_bill_lines (bill_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const line of lines) {
+      insertLine.run(id, Number(line.item_id), line.qty, line.rate, line.qty * line.rate)
+    }
+
+    const oldEntry = db.prepare("SELECT id FROM entries WHERE reference = ? AND type = 'IN'").get(`PB-${existing.bill_no}`)
+    if (oldEntry) db.prepare('DELETE FROM entries WHERE id = ?').run(oldEntry.id)
+
+    const entryLines = lines.map(l => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) }))
+    createStockEntry('IN', date, Number(body.supplier_id ?? existing.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
+
+    return { success: true }
   })
 }))
 
@@ -815,7 +876,7 @@ app.post('/api/sales-invoices', route((req) => {
     const loading_amount = num(body.loading_amount)
     const unloading_amount = num(body.unloading_amount)
     const freight_amount = num(body.freight_amount)
-    const total_kg = body.lines.reduce((s, l) => s + num(l.qty), 0)
+    const total_kg = lines.reduce((s, l) => s + num(l.qty), 0)
     const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
 
     const info = db.prepare(`
@@ -838,6 +899,70 @@ app.post('/api/sales-invoices', route((req) => {
     createStockEntry('OUT', str(body.date) || today(), Number(body.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
 
     return { id: info.lastInsertRowid, invoice_no: invoiceNo }
+  })
+}))
+
+app.put('/api/sales-invoices/:id', route((req) => {
+  const id = Number(req.params.id)
+  const existing = db.prepare('SELECT * FROM sales_invoices WHERE id = ?').get(id)
+  if (!existing) throw new HttpError(404, 'Sales invoice not found')
+  const body = req.body
+  const customer = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.customer_id ?? existing.customer_id), 'customer')
+  if (!customer) throw new HttpError(400, 'Invalid customer')
+  const lines = validateBillLines(body, 'item')
+  const oldLines = db.prepare('SELECT item_id, qty FROM sales_invoice_lines WHERE invoice_id = ?').all(id)
+  assertSufficientStockForOut(lines.map(l => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) })), oldLines)
+
+  return transaction(() => {
+    const invoiceNo = str(body.invoice_no) || existing.invoice_no
+    const date = str(body.date) || existing.date
+    const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
+    const tax = num(body.tax)
+    const discount = num(body.discount)
+    const loading_amount = num(body.loading_amount)
+    const unloading_amount = num(body.unloading_amount)
+    const freight_amount = num(body.freight_amount)
+    const total_kg = lines.reduce((s, l) => s + Number(l.qty), 0)
+    const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount
+
+    db.prepare(`
+      UPDATE sales_invoices
+      SET invoice_no = ?, date = ?, customer_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, loading_amount = ?, unloading_amount = ?, freight_amount = ?, total_kg = ?, total = ?
+      WHERE id = ?
+    `).run(
+      invoiceNo,
+      date,
+      Number(body.customer_id ?? existing.customer_id),
+      str(body.reference),
+      str(body.note),
+      subtotal,
+      tax,
+      discount,
+      loading_amount,
+      unloading_amount,
+      freight_amount,
+      total_kg,
+      total,
+      id
+    )
+
+    db.prepare('DELETE FROM sales_invoice_lines WHERE invoice_id = ?').run(id)
+    const insertLine = db.prepare(`
+      INSERT INTO sales_invoice_lines (invoice_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const line of lines) {
+      insertLine.run(id, Number(line.item_id), line.qty, line.rate, line.qty * line.rate)
+    }
+
+    const oldEntry = db.prepare("SELECT id FROM entries WHERE reference = ? AND type = 'OUT'").get(`INV-${existing.invoice_no}`)
+    if (oldEntry) db.prepare('DELETE FROM entries WHERE id = ?').run(oldEntry.id)
+
+    const entryLines = lines.map(l => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) }))
+    assertSufficientStockForOut(entryLines, oldLines)
+    createStockEntry('OUT', date, Number(body.customer_id ?? existing.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
+
+    return { success: true }
   })
 }))
 

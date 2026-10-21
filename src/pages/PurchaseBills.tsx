@@ -503,8 +503,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
       if (bill) {
-        await api.deletePurchaseBill(bill.id)
-        await api.createPurchaseBill(input)
+        await api.updatePurchaseBill(bill.id, input)
         notify('Purchase bill updated')
       } else {
         await api.createPurchaseBill(input)
