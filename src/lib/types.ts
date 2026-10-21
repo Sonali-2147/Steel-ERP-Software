@@ -282,7 +282,7 @@ export interface QuotationInput {
   discount?: number
   valid_until?: string
   status?: string
-  lines: { item_id: number; qty: number; rate: number }[]
+  lines?: { item_id: number; qty: number; rate: number }[]
 }
 
 export const UNITS = ['kg', 'MT', 'pcs', 'nos', 'm', 'ft', 'bundle', 'set']
