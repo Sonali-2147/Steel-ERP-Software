@@ -39,7 +39,26 @@ if (process.env.DATA_DIR && dataDir !== process.env.DATA_DIR) {
   console.warn(`Render data directory /data is not writable; using ${dataDir} instead.`)
 }
 
-export const db = new DatabaseSync(path.join(dataDir, 'erp.db'))
+const legacyDataDir = path.join(__dirname, 'data')
+const activeDbPath = path.join(dataDir, 'erp.db')
+const legacyDbPath = path.join(legacyDataDir, 'erp.db')
+
+function migrateLegacyDbIfNeeded() {
+  if (!fs.existsSync(legacyDbPath)) return
+  if (fs.existsSync(activeDbPath) && fs.statSync(activeDbPath).size > 0) return
+
+  try {
+    fs.mkdirSync(path.dirname(activeDbPath), { recursive: true })
+    fs.copyFileSync(legacyDbPath, activeDbPath)
+    console.warn(`Migrated existing database from ${legacyDbPath} to ${activeDbPath}.`)
+  } catch (error) {
+    console.warn(`Could not migrate legacy database: ${error.message}`)
+  }
+}
+
+migrateLegacyDbIfNeeded()
+
+export const db = new DatabaseSync(activeDbPath)
 db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;')
 
 function ensureColumn(tableName, columnName, columnDef) {
