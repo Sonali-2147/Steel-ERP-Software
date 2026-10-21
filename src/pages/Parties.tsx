@@ -8,6 +8,25 @@ import type { Party, PartyInput, PartyType } from '@/lib/types'
 
 const EMPTY: PartyInput = { name: '', contact_person: '', phone: '', email: '', address: '', city: '', gstin: '', active: 1 }
 
+// Validation functions
+const validateGSTIN = (gstin: string): boolean => {
+  if (!gstin) return true // Optional
+  const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+  return gstinRegex.test(gstin.toUpperCase())
+}
+
+const validatePhone = (phone: string): boolean => {
+  if (!phone) return true // Optional
+  const phoneRegex = /^[6-9]\d{9}$/
+  return phoneRegex.test(phone)
+}
+
+const validateEmail = (email: string): boolean => {
+  if (!email) return true // Optional
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
 export default function Parties({ type }: { type: PartyType }) {
   const store = useStore()
   const list = type === 'supplier' ? store.suppliers : store.customers
@@ -143,6 +162,9 @@ function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | n
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.name.trim()) return notify('Name is required', 'error')
+    if (!validateGSTIN(f.gstin)) return notify('Invalid GSTIN format. Example: 27AVTPC3234C2ZS', 'error')
+    if (!validatePhone(f.phone)) return notify('Invalid phone number. Must be 10 digits starting with 6-9', 'error')
+    if (!validateEmail(f.email)) return notify('Invalid email format', 'error')
     setSaving(true)
     try {
       if (party) {
