@@ -301,8 +301,8 @@ function PaymentForm({ payment, onClose, fixedType }: { payment: Payment | null;
         cheque_no: chequeNo,
         cheque_date: chequeDate,
         note,
-        purchase_bill_id: type === 'OUT' ? purchaseBillId : null,
-        sales_invoice_id: type === 'IN' ? salesInvoiceId : null,
+        // purchase_bill_id: type === 'OUT' ? purchaseBillId : null,
+        // sales_invoice_id: type === 'IN' ? salesInvoiceId : null,
       }
       if (payment) {
         await api.updatePayment(payment.id, input)
