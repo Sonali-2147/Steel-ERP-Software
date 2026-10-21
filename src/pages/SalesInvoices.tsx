@@ -71,7 +71,7 @@ export default function SalesInvoices() {
     printWindow.document.write(`
       <html>
       <head>
-        <title>Tax Invoice - ${invoice.invoice_no}</title>
+        <title>Quotation - ${invoice.invoice_no}</title>
         <style>
           @page { size: A4; margin: 10mm; }
           * { box-sizing: border-box; }
@@ -189,7 +189,7 @@ export default function SalesInvoices() {
             </p>
           </div>
 
-          <div class="invoice-title">Tax Invoice</div>
+          <div class="invoice-title">Quotation</div>
 
           <div class="details-grid">
             <div>
@@ -307,9 +307,9 @@ export default function SalesInvoices() {
 
           <div class="bank-details">
             <div class="section-title">Bank Details</div>
-            <div class="field-row"><span class="field-label">Bank Name:</span><span class="field-value">-</span></div>
-            <div class="field-row"><span class="field-label">A/c No.:</span><span class="field-value">-</span></div>
-            <div class="field-row"><span class="field-label">Branch & IFS Code:</span><span class="field-value">-</span></div>
+            <div class="field-row"><span class="field-label">Bank Name:</span><span class="field-value">Axis Bank</span></div>
+            <div class="field-row"><span class="field-label">A/c No.:</span><span class="field-value">922030050546660</span></div>
+            <div class="field-row"><span class="field-label">Branch & IFS Code:</span><span class="field-value">Vita - UTIB0002839 </span></div>
           </div>
 
           <div class="footer">

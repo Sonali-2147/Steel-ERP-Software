@@ -300,7 +300,7 @@ function PaymentForm({ payment, onClose, fixedType }: { payment: Payment | null;
         bank_name: bankName,
         cheque_no: chequeNo,
         cheque_date: chequeDate,
-        note,
+        note
         // purchase_bill_id: type === 'OUT' ? purchaseBillId : null,
         // sales_invoice_id: type === 'IN' ? salesInvoiceId : null,
       }
