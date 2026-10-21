@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, inr, qty, todayISO } from '@/lib/format'
+import { amountInWords, fmtDate, inr, qty, todayISO } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
 
@@ -14,7 +14,6 @@ export default function PurchaseBills() {
   const [params, setParams] = useSearchParams()
 
   const [bills, setBills] = useState<PurchaseBill[]>([])
-  const [billDetails, setBillDetails] = useState<Map<number, PurchaseBill>>(new Map())
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -30,14 +29,6 @@ export default function PurchaseBills() {
       .catch((e) => notify(e.message, 'error'))
   }, [from, to, supplierId, notify])
 
-  const loadBillDetails = useCallback(async (billId: number) => {
-    try {
-      const bill = await api.getPurchaseBill(billId)
-      setBillDetails(prev => new Map(prev).set(billId, bill))
-    } catch (e) {
-      notify((e as Error).message, 'error')
-    }
-  }, [notify])
 
   useEffect(() => {
     const t = setTimeout(load, 200)
@@ -52,90 +43,299 @@ export default function PurchaseBills() {
     }
   }, [params, setParams])
 
-  const handleExpand = async (billId: number) => {
-    const newExpanded = expanded === billId ? null : billId
-    setExpanded(newExpanded)
-    if (newExpanded && !billDetails.has(billId)) {
-      await loadBillDetails(billId)
-    }
+  const handleExpand = (billId: number) => {
+    setExpanded(expanded === billId ? null : billId)
   }
 
   const printBill = (bill: PurchaseBill) => {
-    const fullBill = billDetails.get(bill.id) || bill
+    const fullBill = bill
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
+
+    // Calculate CGST and SGST (assuming 9% each for 18% GST)
+    const cgst = bill.tax / 2
+    const sgst = bill.tax / 2
+    const totalQty = (fullBill.lines || []).reduce((sum, l) => sum + l.qty, 0)
+
+    // Group by HSN code for tax summary
+    const byHsn = new Map<string, { taxable: number; cgstRate: number; sgstRate: number }>()
+    for (const l of fullBill.lines || []) {
+      const hsn = l.hsn_code || '-'
+      const gstRate = l.gst_rate || 18
+      const existing = byHsn.get(hsn) || { taxable: 0, cgstRate: gstRate / 2, sgstRate: gstRate / 2 }
+      existing.taxable += l.amount
+      byHsn.set(hsn, existing)
+    }
+
     printWindow.document.write(`
       <html>
       <head>
         <title>Purchase Bill - ${bill.bill_no}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-          .header { text-align: center; margin-bottom: 20px; }
-          .header h1 { margin: 0; font-size: 24px; }
-          .header h2 { margin: 5px 0; font-size: 16px; color: #666; }
-          .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
-          .info div { width: 45%; }
-          .info label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background: #f5f5f5; }
-          .totals { text-align: right; margin-top: 20px; }
-          .totals div { margin: 5px 0; }
-          .totals .grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
-          @media print { body { padding: 0; } }
+          @page { size: A4; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            color: #222;
+            margin: 0;
+            padding: 5px;
+          }
+          .invoice { width: 100%; border: 1px solid #000; }
+          .header {
+            text-align: center;
+            padding: 8px;
+            border-bottom: 1px solid #000;
+          }
+          .header h1 {
+            font-size: 18px;
+            margin: 0 0 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+          }
+          .header p { margin: 2px 0; line-height: 1.3; font-size: 9px; }
+          .invoice-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 6px;
+            border-bottom: 1px solid #000;
+            text-transform: uppercase;
+          }
+          .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-bottom: 1px solid #000;
+          }
+          .details-grid > div { padding: 8px; line-height: 1.6; font-size: 9px; }
+          .details-grid > div:first-child { border-right: 1px solid #000; }
+          .section-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            font-size: 10px;
+          }
+          .field-row { display: flex; margin-bottom: 2px; }
+          .field-label { width: 140px; font-weight: bold; }
+          .field-value { flex: 1; }
+          table { width: 100%; border-collapse: collapse; font-size: 9px; }
+          th, td {
+            border: 1px solid #000;
+            padding: 4px 3px;
+            vertical-align: top;
+          }
+          th { text-align: center; font-weight: bold; background: #f5f5f5; }
+          .right { text-align: right; white-space: nowrap; }
+          .center { text-align: center; }
+          .summary-section {
+            padding: 8px;
+            border-bottom: 1px solid #000;
+          }
+          .summary-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+          .amount-words {
+            padding: 6px 8px;
+            border-bottom: 1px solid #000;
+            font-style: italic;
+            font-size: 9px;
+          }
+          .tax-summary-table { margin-top: 8px; }
+          .tax-summary-table th, .tax-summary-table td { padding: 3px; }
+          .bank-details {
+            padding: 8px;
+            border-bottom: 1px solid #000;
+            font-size: 9px;
+          }
+          .footer {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            border-top: 1px solid #000;
+            min-height: 80px;
+          }
+          .footer > div { padding: 8px; font-size: 9px; }
+          .footer > div:first-child { border-right: 1px solid #000; }
+          .signature {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: flex-end;
+          }
+          .sign-space { height: 30px; }
+          .sign-label { font-weight: bold; }
+          .computer-note {
+            text-align: center;
+            padding: 5px;
+            border-top: 1px solid #000;
+            font-size: 9px;
+          }
+          @media print {
+            body { padding: 0; }
+            .invoice, tr { break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>Krishna Steel Center</h1>
-          <h2>Purchase Bill</h2>
-        </div>
-        <div class="info">
-          <div>
-            <label>Bill No:</label> ${bill.bill_no}<br>
-            <label>Date:</label> ${fmtDate(bill.date)}<br>
-            <label>Reference:</label> ${bill.reference || '-'}
+        <div class="invoice">
+          <div class="header">
+            <h1>Krishna Steel Corporation</h1>
+            <p>
+              250/1/2, Near Gokul Hotel, Karad Road, Vita,<br>
+              Tal-Khanapur, Dist-Sangli, Maharashtra
+            </p>
+            <p>
+              <strong>GSTIN/UIN:</strong> 27AVTPC3234C2ZS | <strong>State Name:</strong> Maharashtra<br>
+              <strong>Contact:</strong> 9975981103 / 9421120822 | <strong>E-Mail:</strong> krishnasteelcorporation03@gmail.com
+            </p>
           </div>
-          <div>
-            <label>Supplier:</label> ${bill.supplier_name || '-'}<br>
-            ${bill.contact_person ? `<label>Contact:</label> ${bill.contact_person}<br>` : ''}
-            ${bill.phone ? `<label>Phone:</label> ${bill.phone}<br>` : ''}
-            ${bill.gstin ? `<label>GSTIN:</label> ${bill.gstin}<br>` : ''}
+
+          <div class="invoice-title">Purchase Bill</div>
+
+          <div class="details-grid">
+            <div>
+              <div class="section-title">Bill Details</div>
+              <div class="field-row"><span class="field-label">Bill No.:</span><span class="field-value">${bill.bill_no}</span></div>
+              <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">${fmtDate(bill.date)}</span></div>
+              <div class="field-row"><span class="field-label">Delivery Note:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Reference No. & Date:</span><span class="field-value">${bill.reference || '-'}</span></div>
+              <div class="field-row"><span class="field-label">Other References:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Supplier's Order No.:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Dispatch Doc No.:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Delivery Note Date:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Dispatched through:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Destination:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Terms of Delivery:</span><span class="field-value">-</span></div>
+            </div>
+            <div>
+              <div class="section-title">Supplier (Bill to)</div>
+              <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${bill.supplier_name || '-'}</span></div>
+              <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${bill.address || '-'}</span></div>
+              <div class="field-row"><span class="field-label">GSTIN/UIN:</span><span class="field-value">${bill.gstin || '-'}</span></div>
+              <div class="field-row"><span class="field-label">State Name:</span><span class="field-value">${bill.city || '-'}</span></div>
+            </div>
           </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Code</th>
-              <th style="text-align: right">Qty</th>
-              <th style="text-align: right">Rate</th>
-              <th style="text-align: right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(fullBill.lines || []).map(l => `
+
+          <table>
+            <thead>
               <tr>
-                <td>${l.name}</td>
-                <td>${l.code}</td>
-                <td style="text-align: right">${qty(l.qty)} ${l.unit}</td>
-                <td style="text-align: right">${inr(l.rate)}</td>
-                <td style="text-align: right">${inr(l.amount)}</td>
+                <th style="width: 5%">SI</th>
+                <th style="width: 40%">Description of Goods</th>
+                <th style="width: 10%">HSN/SAC</th>
+                <th style="width: 10%">Quantity</th>
+                <th style="width: 10%">Rate</th>
+                <th style="width: 10%">per</th>
+                <th style="width: 15%">Amount</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div class="totals">
-          <div>Subtotal: ${inr(bill.subtotal)}</div>
-          ${bill.tax > 0 ? `<div>Tax: ${inr(bill.tax)}</div>` : ''}
-          ${bill.discount > 0 ? `<div>Discount: -${inr(bill.discount)}</div>` : ''}
-          <div class="grand-total">Total: ${inr(bill.total)}</div>
+            </thead>
+            <tbody>
+              ${(fullBill.lines || []).map((l, i) => `
+                <tr>
+                  <td class="center">${i + 1}</td>
+                  <td>${l.name}</td>
+                  <td class="center">${l.hsn_code || '-'}</td>
+                  <td class="right">${qty(l.qty)}</td>
+                  <td class="right">${inr(l.rate)}</td>
+                  <td class="center">${l.unit}</td>
+                  <td class="right">${inr(l.amount)}</td>
+                </tr>
+              `).join('')}
+              <tr>
+                <td colspan="2" class="right" style="font-weight: bold;">Total Quantity:</td>
+                <td colspan="2" class="right" style="font-weight: bold;">${qty(totalQty, 'kg')}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="summary-section">
+            <div class="summary-row"><span>Subtotal:</span><span>${inr(bill.subtotal)}</span></div>
+            <div class="summary-row"><span>CGST:</span><span>${inr(cgst)}</span></div>
+            <div class="summary-row"><span>SGST:</span><span>${inr(sgst)}</span></div>
+            <div class="summary-row"><span>R Off:</span><span>0.00</span></div>
+            <div class="summary-row" style="font-weight: bold; margin-top: 4px;"><span>Total:</span><span>${inr(bill.total)}</span></div>
+            <div style="margin-top: 4px; font-style: italic;">E. & O.E</div>
+          </div>
+
+          <div class="amount-words">
+            <strong>Amount Chargeable (in words):</strong> ${amountInWords(bill.total)}
+          </div>
+
+          <div class="summary-section">
+            <div class="section-title">HSN/SAC Tax Summary</div>
+            <table class="tax-summary-table">
+              <thead>
+                <tr>
+                  <th>HSN/SAC</th>
+                  <th>Taxable Value</th>
+                  <th>CGST Rate</th>
+                  <th>CGST Amount</th>
+                  <th>SGST/UTGST Rate</th>
+                  <th>SGST/UTGST Amount</th>
+                  <th>Total Tax Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${Array.from(byHsn.entries()).map(([hsn, data]) => `
+                  <tr>
+                    <td class="center">${hsn}</td>
+                    <td class="right">${inr(data.taxable)}</td>
+                    <td class="center">${data.cgstRate}%</td>
+                    <td class="right">${inr(data.taxable * data.cgstRate / 100)}</td>
+                    <td class="center">${data.sgstRate}%</td>
+                    <td class="right">${inr(data.taxable * data.sgstRate / 100)}</td>
+                    <td class="right">${inr(data.taxable * (data.cgstRate + data.sgstRate) / 100)}</td>
+                  </tr>
+                `).join('')}
+                <tr style="font-weight: bold;">
+                  <td class="center">Total</td>
+                  <td class="right">${inr(bill.subtotal)}</td>
+                  <td></td>
+                  <td class="right">${inr(cgst)}</td>
+                  <td></td>
+                  <td class="right">${inr(sgst)}</td>
+                  <td class="right">${inr(bill.tax)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="amount-words">
+            <strong>Tax Amount (in words):</strong> ${amountInWords(bill.tax)}
+          </div>
+
+          <div class="bank-details">
+            <div class="section-title">Bank Details</div>
+            <div class="field-row"><span class="field-label">Bank Name:</span><span class="field-value">-</span></div>
+            <div class="field-row"><span class="field-label">A/c No.:</span><span class="field-value">-</span></div>
+            <div class="field-row"><span class="field-label">Branch & IFS Code:</span><span class="field-value">-</span></div>
+          </div>
+
+          <div class="footer">
+            <div>
+              <strong>Declaration</strong>
+              <p style="margin: 4px 0; line-height: 1.4;">
+                We declare that this Bill shows the actual price of the goods described and that all particulars are true and correct.
+              </p>
+            </div>
+            <div class="signature">
+              <strong>for Krishna Steel Corporation</strong>
+              <div class="sign-space"></div>
+              <div class="sign-label">Authorised Signatory</div>
+            </div>
+          </div>
+
+          <div class="computer-note">
+            This is a Computer Generated Purchase Bill
+          </div>
         </div>
-        ${bill.note ? `<div style="margin-top: 20px;"><label>Note:</label> ${bill.note}</div>` : ''}
-        <script>window.print();</script>
+        <script>
+          window.onload = function() { window.print(); };
+        </script>
       </body>
       </html>
     `)
+
     printWindow.document.close()
   }
 
@@ -197,7 +397,6 @@ export default function PurchaseBills() {
             {bills.length === 0 ? (
               <EmptyRow cols={9} text="No purchase bills found" />
             ) : bills.map((b) => {
-              const fullBill = billDetails.get(b.id) || b
               return (
               <Fragment key={b.id}>
                 <Tr onClick={() => handleExpand(b.id)} className="cursor-pointer hover:bg-slate-50">
@@ -206,7 +405,7 @@ export default function PurchaseBills() {
                   <Td><Badge>{b.bill_no}</Badge></Td>
                   <Td>{b.supplier_name}</Td>
                   <Td>{b.reference || '-'}</Td>
-                  <Td>{fullBill.lines?.length || 0} items</Td>
+                  <Td>{b.lines?.length || 0} items</Td>
                   <Td right>{inr(b.subtotal)}</Td>
                   <Td right className="font-semibold">{inr(b.total)}</Td>
                   <Td right>
@@ -223,7 +422,7 @@ export default function PurchaseBills() {
                     </div>
                   </Td>
                 </Tr>
-                {expanded === b.id && fullBill.lines && (
+                {expanded === b.id && b.lines && (
                   <tr className="bg-slate-50">
                     <td colSpan={9} className="p-4">
                       <table className="w-full text-sm">
@@ -236,7 +435,7 @@ export default function PurchaseBills() {
                           </tr>
                         </thead>
                         <tbody>
-                          {fullBill.lines.map((l, i) => (
+                          {b.lines.map((l, i) => (
                             <tr key={i} className="border-t border-slate-100">
                               <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
                               <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>

@@ -11,8 +11,19 @@ import { stockStatus, useStore } from '@/lib/store'
 import { UNITS, type Item, type ItemInput } from '@/lib/types'
 
 const EMPTY: ItemInput = {
-  code: '', name: '', category: '', grade: '', size: '', unit: 'kg',
-  opening_stock: 0, min_stock: 0, purchase_rate: 0, sale_rate: 0,
+  code: '',
+  name: '',
+  category: '',
+  grade: '',
+  size: '',
+  unit: 'kg',
+  hsn_code: '',
+  gst_rate: 0,
+  opening_stock: 0,
+  min_stock: 0,
+  purchase_rate: 0,
+  sale_rate: 0,
+  active: 1,
 }
 const PAGE = 25
 
@@ -185,7 +196,7 @@ function ItemForm({ item, categories, onClose }: { item: Item | null; categories
   const [f, setF] = useState<ItemInput>(() => (item ? { ...EMPTY, ...item } : EMPTY))
   const [saving, setSaving] = useState(false)
   const set = <K extends keyof ItemInput>(k: K, v: ItemInput[K]) => setF((s) => ({ ...s, [k]: v }))
-  const numField = (k: 'opening_stock' | 'min_stock' | 'purchase_rate' | 'sale_rate') => (
+  const numField = (k: 'opening_stock' | 'min_stock' | 'purchase_rate' | 'sale_rate' | 'gst_rate') => (
     <Input type="number" min={0} step="any" value={f[k] || ''} onChange={(e) => set(k, Number(e.target.value))} placeholder="0" />
   )
 
@@ -241,6 +252,16 @@ function ItemForm({ item, categories, onClose }: { item: Item | null; categories
           <Input list="item-units" value={f.unit} onChange={(e) => set('unit', e.target.value)} />
           <datalist id="item-units">{UNITS.map((u) => <option key={u} value={u} />)}</datalist>
         </Field>
+        <Field label="Status">
+          <Select value={f.active ? '1' : '0'} onChange={(e) => set('active', e.target.value === '1' ? 1 : 0)}>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </Select>
+        </Field>
+        <Field label="HSN Code">
+          <Input value={f.hsn_code} onChange={(e) => set('hsn_code', e.target.value)} placeholder="e.g. 7208" />
+        </Field>
+        <Field label="GST Rate (%)">{numField('gst_rate')}</Field>
         <Field label="Opening Stock" hint="Stock you already have when starting">{numField('opening_stock')}</Field>
         <Field label="Minimum Stock" hint="Alert when stock goes at or below this">{numField('min_stock')}</Field>
         <Field label="Purchase Rate (₹ per unit)">{numField('purchase_rate')}</Field>

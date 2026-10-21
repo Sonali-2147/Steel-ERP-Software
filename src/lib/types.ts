@@ -6,6 +6,8 @@ export interface Item {
   grade: string
   size: string
   unit: string
+  hsn_code: string
+  gst_rate: number
   opening_stock: number
   min_stock: number
   purchase_rate: number
@@ -14,7 +16,7 @@ export interface Item {
   stock: number
 }
 
-export type ItemInput = Omit<Item, 'id' | 'active' | 'stock'>
+export type ItemInput = Omit<Item, 'id' | 'stock'>
 
 export type PartyType = 'supplier' | 'customer'
 
@@ -32,7 +34,7 @@ export interface Party {
   entry_count?: number
 }
 
-export type PartyInput = Pick<Party, 'name' | 'contact_person' | 'phone' | 'email' | 'address' | 'city' | 'gstin'>
+export type PartyInput = Pick<Party, 'name' | 'contact_person' | 'phone' | 'email' | 'address' | 'city' | 'gstin' | 'active'>
 
 export type EntryType = 'IN' | 'OUT'
 
@@ -148,6 +150,8 @@ export interface PurchaseBillLine {
   code?: string
   name?: string
   unit?: string
+  hsn_code?: string
+  gst_rate?: number
 }
 
 export interface PurchaseBill {
@@ -193,6 +197,8 @@ export interface SalesInvoiceLine {
   name?: string
   code?: string
   unit?: string
+  hsn_code?: string
+  gst_rate?: number
 }
 
 export interface SalesInvoice {
@@ -262,6 +268,8 @@ export interface QuotationLine {
   name?: string
   code?: string
   unit?: string
+  hsn_code?: string
+  gst_rate?: number
 }
 
 export interface QuotationInput {

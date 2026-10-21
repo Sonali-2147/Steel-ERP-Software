@@ -106,5 +106,6 @@ export const api = {
     request<Quotation[]>(`/api/quotations${qs(params || {})}`),
   getQuotation: (id: number) => request<Quotation>(`/api/quotations/${id}`),
   createQuotation: (quotation: QuotationInput) => request<{ id: number; quotation_no: string }>('/api/quotations', send('POST', quotation)),
+  updateQuotation: (id: number, quotation: QuotationInput) => request<{ success: boolean }>(`/api/quotations/${id}`, send('PUT', quotation)),
   deleteQuotation: (id: number) => request<{ success: boolean }>(`/api/quotations/${id}`, send('DELETE')),
 }

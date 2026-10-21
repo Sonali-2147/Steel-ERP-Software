@@ -21,6 +21,8 @@ export function initDb() {
       grade TEXT NOT NULL DEFAULT '',
       size TEXT NOT NULL DEFAULT '',
       unit TEXT NOT NULL DEFAULT 'kg',
+      hsn_code TEXT NOT NULL DEFAULT '',
+      gst_rate REAL NOT NULL DEFAULT 0,
       opening_stock REAL NOT NULL DEFAULT 0,
       min_stock REAL NOT NULL DEFAULT 0,
       purchase_rate REAL NOT NULL DEFAULT 0,

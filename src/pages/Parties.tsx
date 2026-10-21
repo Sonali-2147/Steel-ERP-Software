@@ -6,7 +6,7 @@ import { downloadCSV } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { Party, PartyInput, PartyType } from '@/lib/types'
 
-const EMPTY: PartyInput = { name: '', contact_person: '', phone: '', email: '', address: '', city: '', gstin: '' }
+const EMPTY: PartyInput = { name: '', contact_person: '', phone: '', email: '', address: '', city: '', gstin: '', active: 1 }
 
 export default function Parties({ type }: { type: PartyType }) {
   const store = useStore()
@@ -136,18 +136,22 @@ export default function Parties({ type }: { type: PartyType }) {
 function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | null; onClose: () => void }) {
   const { refresh, notify } = useStore()
   const single = type === 'supplier' ? 'Supplier' : 'Customer'
-  const [f, setF] = useState<PartyInput>(() => (party ? { ...EMPTY, ...party } : EMPTY))
+  const [f, setF] = useState<PartyInput>(() => (party ? { ...EMPTY, ...party, active: party.active } : { ...EMPTY, active: 1 }))
   const [saving, setSaving] = useState(false)
-  const set = (k: keyof PartyInput, v: string) => setF((s) => ({ ...s, [k]: v }))
+  const set = (k: keyof PartyInput, v: string | number) => setF((s) => ({ ...s, [k]: v }))
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!f.name.trim()) return notify('Name is required', 'error')
     setSaving(true)
     try {
-      if (party) await api.updateParty(party.id, f)
-      else await api.createParty(type, f)
-      notify(`${single} ${party ? 'updated' : 'added'}`)
+      if (party) {
+        await api.updateParty(party.id, f)
+        notify(`${single} updated`)
+      } else {
+        await api.createParty(type, f)
+        notify(`${single} added`)
+      }
       await refresh()
       onClose()
     } catch (err) {
@@ -179,6 +183,12 @@ function PartyForm({ type, party, onClose }: { type: PartyType; party: Party | n
         <Field label="Phone"><Input value={f.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
         <Field label="Email"><Input type="email" value={f.email} onChange={(e) => set('email', e.target.value)} /></Field>
         <Field label="City"><Input value={f.city} onChange={(e) => set('city', e.target.value)} /></Field>
+        <Field label="Status">
+          <Select value={f.active ? '1' : '0'} onChange={(e) => set('active', e.target.value === '1' ? 1 : 0)}>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </Select>
+        </Field>
         <Field label="GSTIN" className="sm:col-span-2"><Input value={f.gstin} onChange={(e) => set('gstin', e.target.value)} placeholder="Optional" /></Field>
         <Field label="Address" className="sm:col-span-2"><Textarea rows={2} value={f.address} onChange={(e) => set('address', e.target.value)} /></Field>
       </form>

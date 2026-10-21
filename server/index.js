@@ -115,6 +115,8 @@ function cleanItem(body) {
     grade: str(body.grade),
     size: str(body.size),
     unit: str(body.unit) || 'kg',
+    hsn_code: str(body.hsn_code),
+    gst_rate: num(body.gst_rate),
     opening_stock: num(body.opening_stock),
     min_stock: num(body.min_stock),
     purchase_rate: num(body.purchase_rate),
@@ -125,18 +127,18 @@ function cleanItem(body) {
 function insertItem(it) {
   const code = it.code || nextItemCode()
   const r = db.prepare(`
-    INSERT INTO items (code, name, category, grade, size, unit, opening_stock, min_stock, purchase_rate, sale_rate)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(code, it.name, it.category, it.grade, it.size, it.unit, it.opening_stock, it.min_stock, it.purchase_rate, it.sale_rate)
+    INSERT INTO items (code, name, category, grade, size, unit, hsn_code, gst_rate, opening_stock, min_stock, purchase_rate, sale_rate)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(code, it.name, it.category, it.grade, it.size, it.unit, it.hsn_code, it.gst_rate, it.opening_stock, it.min_stock, it.purchase_rate, it.sale_rate)
   return Number(r.lastInsertRowid)
 }
 
 function updateItem(id, it) {
   db.prepare(`
-    UPDATE items SET code = ?, name = ?, category = ?, grade = ?, size = ?, unit = ?,
-      opening_stock = ?, min_stock = ?, purchase_rate = ?, sale_rate = ?
+    UPDATE items SET code = ?, name = ?, category = ?, grade = ?, size = ?, unit = ?, hsn_code = ?, gst_rate = ?,
+      opening_stock = ?, min_stock = ?, purchase_rate = ?, sale_rate = ?, active = ?
     WHERE id = ?
-  `).run(it.code, it.name, it.category, it.grade, it.size, it.unit, it.opening_stock, it.min_stock, it.purchase_rate, it.sale_rate, id)
+  `).run(it.code, it.name, it.category, it.grade, it.size, it.unit, it.hsn_code, it.gst_rate, it.opening_stock, it.min_stock, it.purchase_rate, it.sale_rate, it.active !== undefined ? (it.active ? 1 : 0) : 1, id)
 }
 
 app.get('/api/items', route(() => db.prepare(`${ITEM_SELECT} ORDER BY i.name COLLATE NOCASE`).all()))
@@ -228,7 +230,7 @@ app.post('/api/items/import', route((req) => {
 // Suppliers & Customers
 // ------------------------------------------------------------------
 function cleanParty(body) {
-  return {
+  const cleaned = {
     name: str(body.name),
     contact_person: str(body.contact_person),
     phone: str(body.phone),
@@ -237,6 +239,10 @@ function cleanParty(body) {
     city: str(body.city),
     gstin: str(body.gstin).toUpperCase(),
   }
+  if (body.active !== undefined) {
+    cleaned.active = body.active ? 1 : 0
+  }
+  return cleaned
 }
 
 app.get('/api/parties', route((req) => {
@@ -264,10 +270,25 @@ app.put('/api/parties/:id', route((req) => {
   const id = Number(req.params.id)
   const p = cleanParty(req.body)
   if (!p.name) throw new HttpError(400, 'Name is required')
-  db.prepare(`
-    UPDATE parties SET name = ?, contact_person = ?, phone = ?, email = ?, address = ?, city = ?, gstin = ?
-    WHERE id = ?
-  `).run(p.name, p.contact_person, p.phone, p.email, p.address, p.city, p.gstin, id)
+  
+  // Build dynamic update query based on provided fields
+  const updates = []
+  const values = []
+  
+  updates.push('name = ?')
+  values.push(p.name)
+  
+  if (p.contact_person !== undefined) { updates.push('contact_person = ?'); values.push(p.contact_person) }
+  if (p.phone !== undefined) { updates.push('phone = ?'); values.push(p.phone) }
+  if (p.email !== undefined) { updates.push('email = ?'); values.push(p.email) }
+  if (p.address !== undefined) { updates.push('address = ?'); values.push(p.address) }
+  if (p.city !== undefined) { updates.push('city = ?'); values.push(p.city) }
+  if (p.gstin !== undefined) { updates.push('gstin = ?'); values.push(p.gstin) }
+  if (p.active !== undefined) { updates.push('active = ?'); values.push(p.active ? 1 : 0) }
+  
+  values.push(id)
+  
+  db.prepare(`UPDATE parties SET ${updates.join(', ')} WHERE id = ?`).run(...values)
   return db.prepare('SELECT * FROM parties WHERE id = ?').get(id)
 }))
 
@@ -334,6 +355,17 @@ function validateEntry(body) {
 function insertLines(entryId, lines) {
   const ins = db.prepare('INSERT INTO entry_lines (entry_id, item_id, qty, rate) VALUES (?, ?, ?, ?)')
   for (const l of lines) ins.run(entryId, l.item_id, l.qty, l.rate)
+}
+
+function createStockEntry(type, date, partyId, reference, note, lines) {
+  const entryNo = nextEntryNo(type)
+  const r = db.prepare(`
+    INSERT INTO entries (entry_no, type, date, party_id, reference, note)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(entryNo, type, date, partyId, reference, note)
+  const entryId = Number(r.lastInsertRowid)
+  insertLines(entryId, lines)
+  return entryId
 }
 
 app.get('/api/entries', route((req) => {
@@ -534,12 +566,23 @@ app.get('/api/purchase-bills', route((req) => {
   if (req.query.from) { cond.push('b.date >= ?'); params.push(req.query.from) }
   if (req.query.to) { cond.push('b.date <= ?'); params.push(req.query.to) }
   if (req.query.supplier_id) { cond.push('b.supplier_id = ?'); params.push(Number(req.query.supplier_id)) }
-  return db.prepare(`
+  const bills = db.prepare(`
     SELECT b.*, p.name AS supplier_name
     FROM purchase_bills b LEFT JOIN parties p ON p.id = b.supplier_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY b.date DESC, b.id DESC
   `).all(...params)
+  if (bills.length === 0) return []
+  const ids = bills.map(b => b.id)
+  const lines = db.prepare(`
+    SELECT l.*, i.code, i.name, i.unit, i.hsn_code, i.gst_rate
+    FROM purchase_bill_lines l JOIN items i ON i.id = l.item_id
+    WHERE l.bill_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY l.id
+  `).all(...ids)
+  const byBill = new Map(ids.map(id => [id, []]))
+  for (const l of lines) byBill.get(l.bill_id).push(l)
+  return bills.map(b => ({ ...b, lines: byBill.get(b.id) }))
 }))
 
 app.get('/api/purchase-bills/:id', route((req) => {
@@ -587,14 +630,27 @@ app.post('/api/purchase-bills', route((req) => {
       insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
     }
 
+    // Create stock entry for purchase
+    const entryLines = body.lines.map(l => ({ item_id: Number(l.item_id), qty: num(l.qty), rate: num(l.rate) }))
+    createStockEntry('IN', str(body.date) || today(), Number(body.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
+
     return { id: info.lastInsertRowid, bill_no: billNo }
   })
 }))
 
 app.delete('/api/purchase-bills/:id', route((req) => {
-  const bill = db.prepare('SELECT id FROM purchase_bills WHERE id = ?').get(Number(req.params.id))
+  const billId = Number(req.params.id)
+  const bill = db.prepare('SELECT id, bill_no, date, supplier_id FROM purchase_bills WHERE id = ?').get(billId)
   if (!bill) throw new HttpError(404, 'Purchase bill not found')
-  db.prepare('DELETE FROM purchase_bills WHERE id = ?').run(bill.id)
+
+  return transaction(() => {
+    // Find and delete the associated stock entry
+    const entry = db.prepare("SELECT id FROM entries WHERE reference = ? AND type = 'IN'").get(`PB-${bill.bill_no}`)
+    if (entry) {
+      db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id)
+    }
+    db.prepare('DELETE FROM purchase_bills WHERE id = ?').run(billId)
+  })
   return { success: true }
 }))
 
@@ -608,12 +664,23 @@ app.get('/api/sales-invoices', route((req) => {
   if (req.query.from) { cond.push('i.date >= ?'); params.push(req.query.from) }
   if (req.query.to) { cond.push('i.date <= ?'); params.push(req.query.to) }
   if (req.query.customer_id) { cond.push('i.customer_id = ?'); params.push(Number(req.query.customer_id)) }
-  return db.prepare(`
+  const invoices = db.prepare(`
     SELECT i.*, p.name AS customer_name
     FROM sales_invoices i LEFT JOIN parties p ON p.id = i.customer_id
     ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
     ORDER BY i.date DESC, i.id DESC
   `).all(...params)
+  if (invoices.length === 0) return []
+  const ids = invoices.map(i => i.id)
+  const lines = db.prepare(`
+    SELECT l.*, i.code, i.name, i.unit, i.hsn_code, i.gst_rate
+    FROM sales_invoice_lines l JOIN items i ON i.id = l.item_id
+    WHERE l.invoice_id IN (${ids.map(() => '?').join(',')})
+    ORDER BY l.id
+  `).all(...ids)
+  const byInvoice = new Map(ids.map(id => [id, []]))
+  for (const l of lines) byInvoice.get(l.invoice_id).push(l)
+  return invoices.map(i => ({ ...i, lines: byInvoice.get(i.id) }))
 }))
 
 app.get('/api/sales-invoices/:id', route((req) => {
@@ -661,14 +728,28 @@ app.post('/api/sales-invoices', route((req) => {
       insertLine.run(info.lastInsertRowid, Number(line.item_id), num(line.qty), num(line.rate), amount)
     }
 
+    // Create stock entry for sale
+    const entryLines = body.lines.map(l => ({ item_id: Number(l.item_id), qty: num(l.qty), rate: num(l.rate) }))
+    assertNoNegativeStock(entryLines.map(l => l.item_id))
+    createStockEntry('OUT', str(body.date) || today(), Number(body.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
+
     return { id: info.lastInsertRowid, invoice_no: invoiceNo }
   })
 }))
 
 app.delete('/api/sales-invoices/:id', route((req) => {
-  const invoice = db.prepare('SELECT id FROM sales_invoices WHERE id = ?').get(Number(req.params.id))
+  const invoiceId = Number(req.params.id)
+  const invoice = db.prepare('SELECT id, invoice_no, date, customer_id FROM sales_invoices WHERE id = ?').get(invoiceId)
   if (!invoice) throw new HttpError(404, 'Sales invoice not found')
-  db.prepare('DELETE FROM sales_invoices WHERE id = ?').run(invoice.id)
+
+  return transaction(() => {
+    // Find and delete the associated stock entry
+    const entry = db.prepare("SELECT id FROM entries WHERE reference = ? AND type = 'OUT'").get(`INV-${invoice.invoice_no}`)
+    if (entry) {
+      db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id)
+    }
+    db.prepare('DELETE FROM sales_invoices WHERE id = ?').run(invoiceId)
+  })
   return { success: true }
 }))
 
@@ -731,7 +812,7 @@ app.get('/api/quotations/:id', route((req) => {
   `).get(Number(req.params.id))
   if (!quotation) throw new HttpError(404, 'Quotation not found')
   const lines = db.prepare(`
-    SELECT l.*, i.code, i.name, i.unit
+    SELECT l.*, i.code, i.name, i.unit, i.hsn_code, i.gst_rate
     FROM quotation_lines l JOIN items i ON i.id = l.item_id
     WHERE l.quotation_id = ?
     ORDER BY l.id
@@ -770,6 +851,58 @@ app.post('/api/quotations', route((req) => {
 
     return { id: info.lastInsertRowid, quotation_no: quotationNo }
   })
+}))
+
+app.put('/api/quotations/:id', route((req) => {
+  const body = req.body
+  const quotation = db.prepare('SELECT id, quotation_no, supplier_id, subtotal, tax, discount, total FROM quotations WHERE id = ?').get(Number(req.params.id))
+  if (!quotation) throw new HttpError(404, 'Quotation not found')
+
+  if (body.supplier_id) {
+    const supplier = db.prepare('SELECT id FROM parties WHERE id = ? AND type = ?').get(Number(body.supplier_id), 'supplier')
+    if (!supplier) throw new HttpError(400, 'Invalid supplier')
+  }
+
+  // Only recalculate totals if lines are provided
+  const hasLines = body.lines && Array.isArray(body.lines) && body.lines.length > 0
+  const subtotal = hasLines ? body.lines.reduce((s, l) => s + (l.qty * l.rate), 0) : quotation.subtotal
+  const tax = body.tax !== undefined ? Number(body.tax) : quotation.tax
+  const discount = body.discount !== undefined ? Number(body.discount) : quotation.discount
+  const total = hasLines ? subtotal + tax - discount : quotation.total
+
+  db.prepare(`
+    UPDATE quotations
+    SET quotation_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, total = ?, valid_until = ?, status = ?
+    WHERE id = ?
+  `).run(
+    str(body.quotation_no) || quotation.quotation_no,
+    str(body.date) || today(),
+    Number(body.supplier_id) || quotation.supplier_id,
+    str(body.reference),
+    str(body.note),
+    subtotal,
+    tax,
+    discount,
+    total,
+    str(body.valid_until) || '',
+    str(body.status) || 'pending',
+    Number(req.params.id)
+  )
+
+  // Only update lines if they are provided
+  if (hasLines) {
+    db.prepare('DELETE FROM quotation_lines WHERE quotation_id = ?').run(Number(req.params.id))
+
+    const insertLine = db.prepare(`
+      INSERT INTO quotation_lines (quotation_id, item_id, qty, rate, amount)
+      VALUES (?, ?, ?, ?, ?)
+    `)
+    for (const l of body.lines) {
+      insertLine.run(Number(req.params.id), Number(l.item_id), Number(l.qty), Number(l.rate), Number(l.qty * l.rate))
+    }
+  }
+
+  return { success: true }
 }))
 
 app.delete('/api/quotations/:id', route((req) => {

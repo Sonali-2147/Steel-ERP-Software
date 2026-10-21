@@ -65,81 +65,179 @@ export default function Quotations() {
     const fullQuotation = quotationDetails.get(quotation.id) || quotation
     const printWindow = window.open('', '_blank')
     if (!printWindow) return
+
+    // Calculate tax summary by HSN code
+    const taxSummary = new Map<string, { taxable: number; cgst: number; sgst: number; total: number }>()
+    fullQuotation.lines?.forEach(l => {
+      const hsn = l.hsn_code || 'N/A'
+      const gstRate = l.gst_rate || 0
+      const taxable = l.amount
+      const cgst = taxable * (gstRate / 2) / 100
+      const sgst = cgst
+      const total = taxable + cgst + sgst
+
+      if (!taxSummary.has(hsn)) {
+        taxSummary.set(hsn, { taxable: 0, cgst: 0, sgst: 0, total: 0 })
+      }
+      const summary = taxSummary.get(hsn)!
+      summary.taxable += taxable
+      summary.cgst += cgst
+      summary.sgst += sgst
+      summary.total += total
+    })
+
     printWindow.document.write(`
       <html>
       <head>
         <title>Quotation - ${quotation.quotation_no}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; font-size: 12px; }
-          .header { text-align: center; margin-bottom: 20px; }
-          .header h1 { margin: 0; font-size: 24px; }
-          .header h2 { margin: 5px 0; font-size: 16px; color: #666; }
-          .info { display: flex; justify-content: space-between; margin-bottom: 20px; }
-          .info div { width: 45%; }
-          .info label { font-weight: bold; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background: #f5f5f5; }
-          .totals { text-align: right; margin-top: 20px; }
-          .totals div { margin: 5px 0; }
-          .totals .grand-total { font-size: 16px; font-weight: bold; border-top: 2px solid #333; padding-top: 10px; }
-          .status { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+          body { font-family: 'Arial', sans-serif; padding: 20px; font-size: 11px; color: #333; }
+          .container { max-width: 800px; margin: 0 auto; }
+          .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          .header h1 { margin: 0; font-size: 22px; font-weight: bold; color: #1a1a1a; }
+          .header p { margin: 5px 0 0; font-size: 11px; color: #666; }
+          .info-row { display: flex; justify-content: space-between; margin-bottom: 15px; }
+          .info-box { width: 48%; }
+          .info-box-title { font-weight: bold; font-size: 12px; margin-bottom: 5px; color: #1a1a1a; }
+          .info-box-content { font-size: 11px; line-height: 1.6; }
+          .status-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
           .status-pending { background: #fff3cd; color: #856404; }
           .status-accepted { background: #d1e7dd; color: #0f5132; }
           .status-rejected { background: #f8d7da; color: #721c04; }
           .status-expired { background: #e2e3e5; color: #41464b; }
-          @media print { body { padding: 0; } }
+          table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+          th { background: #f8f9fa; border: 1px solid #dee2e6; padding: 8px; text-align: left; font-weight: bold; font-size: 11px; }
+          td { border: 1px solid #dee2e6; padding: 8px; font-size: 11px; }
+          .text-right { text-align: right; }
+          .totals { margin-top: 15px; }
+          .totals-row { display: flex; justify-content: flex-end; margin-bottom: 5px; }
+          .totals-label { width: 120px; padding-right: 15px; text-align: right; }
+          .totals-value { width: 100px; text-align: right; }
+          .grand-total { font-weight: bold; font-size: 13px; border-top: 2px solid #333; padding-top: 8px; }
+          .tax-summary { margin-top: 20px; border: 1px solid #dee2e6; padding: 10px; }
+          .tax-summary-title { font-weight: bold; margin-bottom: 8px; }
+          .tax-table { width: 100%; border-collapse: collapse; }
+          .tax-table th, .tax-table td { border: 1px solid #dee2e6; padding: 6px; }
+          .amount-words { margin-top: 15px; font-style: italic; font-size: 11px; }
+          .note { margin-top: 15px; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; }
+          .declaration { margin-top: 20px; font-size: 10px; color: #666; text-align: center; }
+          @media print { body { padding: 0; } .no-print { display: none; } }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>Krishna Steel Center</h1>
-          <h2>Supplier Quotation</h2>
-        </div>
-        <div class="info">
-          <div>
-            <label>Quotation No:</label> ${quotation.quotation_no}<br>
-            <label>Date:</label> ${fmtDate(quotation.date)}<br>
-            <label>Valid Until:</label> ${quotation.valid_until ? fmtDate(quotation.valid_until) : '-'}<br>
-            <label>Status:</label> <span class="status status-${quotation.status}">${quotation.status}</span><br>
-            <label>Reference:</label> ${quotation.reference || '-'}
+        <div class="container">
+          <div class="header">
+            <h1>KRISHNA STEEL CORPORATION</h1>
+            <p>Steel Stock Management System</p>
           </div>
-          <div>
-            <label>Supplier:</label> ${quotation.supplier_name || '-'}<br>
-            ${quotation.contact_person ? `<label>Contact:</label> ${quotation.contact_person}<br>` : ''}
-            ${quotation.phone ? `<label>Phone:</label> ${quotation.phone}<br>` : ''}
-            ${quotation.gstin ? `<label>GSTIN:</label> ${quotation.gstin}<br>` : ''}
+          <div class="info-row">
+            <div class="info-box">
+              <div class="info-box-title">Quotation Details</div>
+              <div class="info-box-content">
+                <strong>Quotation No:</strong> ${quotation.quotation_no}<br>
+                <strong>Date:</strong> ${fmtDate(quotation.date)}<br>
+                <strong>Valid Until:</strong> ${quotation.valid_until ? fmtDate(quotation.valid_until) : '-'}<br>
+                <strong>Status:</strong> <span class="status-badge status-${quotation.status}">${quotation.status}</span><br>
+                <strong>Reference:</strong> ${quotation.reference || '-'}
+              </div>
+            </div>
+            <div class="info-box">
+              <div class="info-box-title">Supplier Details</div>
+              <div class="info-box-content">
+                <strong>Name:</strong> ${quotation.supplier_name || '-'}<br>
+                ${quotation.contact_person ? `<strong>Contact Person:</strong> ${quotation.contact_person}<br>` : ''}
+                ${quotation.phone ? `<strong>Phone:</strong> ${quotation.phone}<br>` : ''}
+                ${quotation.email ? `<strong>Email:</strong> ${quotation.email}<br>` : ''}
+                ${quotation.gstin ? `<strong>GSTIN:</strong> ${quotation.gstin}<br>` : ''}
+                ${quotation.address ? `<strong>Address:</strong> ${quotation.address}<br>` : ''}
+                ${quotation.city ? `<strong>City:</strong> ${quotation.city}` : ''}
+              </div>
+            </div>
           </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Code</th>
-              <th style="text-align: right">Qty</th>
-              <th style="text-align: right">Rate</th>
-              <th style="text-align: right">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(fullQuotation.lines || []).map(l => `
+          <table>
+            <thead>
               <tr>
-                <td>${l.name}</td>
-                <td>${l.code}</td>
-                <td style="text-align: right">${qty(l.qty)} ${l.unit}</td>
-                <td style="text-align: right">${inr(l.rate)}</td>
-                <td style="text-align: right">${inr(l.amount)}</td>
+                <th style="width: 30%">Item Description</th>
+                <th style="width: 15%">Code</th>
+                <th style="width: 10%" class="text-right">HSN/SAC</th>
+                <th style="width: 10%" class="text-right">Qty</th>
+                <th style="width: 10%" class="text-right">Rate</th>
+                <th style="width: 10%" class="text-right">GST %</th>
+                <th style="width: 15%" class="text-right">Amount</th>
               </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div class="totals">
-          <div>Subtotal: ${inr(quotation.subtotal)}</div>
-          ${quotation.tax > 0 ? `<div>Tax: ${inr(quotation.tax)}</div>` : ''}
-          ${quotation.discount > 0 ? `<div>Discount: -${inr(quotation.discount)}</div>` : ''}
-          <div class="grand-total">Total: ${inr(quotation.total)}</div>
+            </thead>
+            <tbody>
+              ${(fullQuotation.lines || []).map(l => `
+                <tr>
+                  <td>${l.name || '-'}</td>
+                  <td>${l.code || '-'}</td>
+                  <td class="text-right">${l.hsn_code || '-'}</td>
+                  <td class="text-right">${qty(l.qty)} ${l.unit || ''}</td>
+                  <td class="text-right">${inr(l.rate)}</td>
+                  <td class="text-right">${l.gst_rate || 0}%</td>
+                  <td class="text-right">${inr(l.amount)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div class="totals-row">
+              <div class="totals-label">Subtotal:</div>
+              <div class="totals-value">${inr(quotation.subtotal)}</div>
+            </div>
+            ${quotation.tax > 0 ? `
+              <div class="totals-row">
+                <div class="totals-label">Tax:</div>
+                <div class="totals-value">${inr(quotation.tax)}</div>
+              </div>
+            ` : ''}
+            ${quotation.discount > 0 ? `
+              <div class="totals-row">
+                <div class="totals-label">Discount:</div>
+                <div class="totals-value">-${inr(quotation.discount)}</div>
+              </div>
+            ` : ''}
+            <div class="totals-row grand-total">
+              <div class="totals-label">Grand Total:</div>
+              <div class="totals-value">${inr(quotation.total)}</div>
+            </div>
+          </div>
+          ${taxSummary.size > 0 ? `
+            <div class="tax-summary">
+              <div class="tax-summary-title">Tax Summary (HSN-wise)</div>
+              <table class="tax-table">
+                <thead>
+                  <tr>
+                    <th>HSN/SAC</th>
+                    <th class="text-right">Taxable Value</th>
+                    <th class="text-right">CGST</th>
+                    <th class="text-right">SGST</th>
+                    <th class="text-right">Total Tax</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${Array.from(taxSummary.entries()).map(([hsn, data]) => `
+                    <tr>
+                      <td>${hsn}</td>
+                      <td class="text-right">${inr(data.taxable)}</td>
+                      <td class="text-right">${inr(data.cgst)}</td>
+                      <td class="text-right">${inr(data.sgst)}</td>
+                      <td class="text-right">${inr(data.cgst + data.sgst)}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : ''}
+          ${quotation.note ? `
+            <div class="note">
+              <strong>Note:</strong> ${quotation.note}
+            </div>
+          ` : ''}
+          <div class="declaration">
+            This is a computer-generated quotation and does not require a physical signature.
+          </div>
         </div>
-        ${quotation.note ? `<div style="margin-top: 20px;"><label>Note:</label> ${quotation.note}</div>` : ''}
         <script>window.print();</script>
       </body>
       </html>
@@ -304,7 +402,7 @@ export default function Quotations() {
         </Table>
       </Card>
 
-      {formOpen && <QuotationForm quotation={editing} onClose={() => setFormOpen(false)} onSuccess={load} />}
+      {formOpen && <QuotationForm quotation={editing} onClose={() => { setFormOpen(false); setQuotationDetails(new Map()); load() }} onSuccess={load} />}
 
       <ConfirmDialog
         open={!!confirmDelete}
@@ -360,7 +458,8 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!supplierId) return notify('Please select a supplier', 'error')
-    if (lines.some((l) => !l.item_id || l.qty <= 0 || l.rate < 0)) {
+    // Only validate line items for new quotations
+    if (!quotation && lines.some((l) => !l.item_id || l.qty <= 0 || l.rate < 0)) {
       return notify('Please fill all line items with valid values', 'error')
     }
     setBusy(true)
@@ -375,17 +474,17 @@ function QuotationForm({ quotation, onClose, onSuccess }: { quotation: Quotation
         discount,
         valid_until: validUntil,
         status,
-        lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
+        // Only include lines for new quotations or when they've been modified
+        lines: quotation ? undefined : lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
       if (quotation) {
-        await api.deleteQuotation(quotation.id)
-        await api.createQuotation(input)
+        await api.updateQuotation(quotation.id, input)
         notify('Quotation updated')
       } else {
         await api.createQuotation(input)
         notify('Quotation created')
       }
-      onSuccess()
+      await onSuccess()
       onClose()
     } catch (err) { notify((err as Error).message, 'error') } finally { setBusy(false) }
   }
