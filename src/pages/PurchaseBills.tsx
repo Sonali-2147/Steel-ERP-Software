@@ -306,9 +306,9 @@ export default function PurchaseBills() {
 
           <div class="bank-details">
             <div class="section-title">Bank Details</div>
-            <div class="field-row"><span class="field-label">Bank Name:</span><span class="field-value">-</span></div>
-            <div class="field-row"><span class="field-label">A/c No.:</span><span class="field-value">-</span></div>
-            <div class="field-row"><span class="field-label">Branch & IFS Code:</span><span class="field-value">-</span></div>
+            <div class="field-row"><span class="field-label">Bank Name:</span><span class="field-value">Axis Bank</span></div>
+            <div class="field-row"><span class="field-label">A/c No.:</span><span class="field-value">922030050546660</span></div>
+            <div class="field-row"><span class="field-label">Branch & IFS Code:</span><span class="field-value">Vita - UTIB0002839 </span></div>
           </div>
 
           <div class="footer">
