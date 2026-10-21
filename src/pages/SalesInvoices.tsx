@@ -430,34 +430,39 @@ export default function SalesInvoices() {
                         <thead>
                           <tr className="text-slate-500">
                             <th className="pb-2 text-left font-medium">Item</th>
+                            <th className="pb-2 text-right font-medium">Current Stock</th>
                             <th className="pb-2 text-right font-medium">Qty</th>
                             <th className="pb-2 text-right font-medium">Rate</th>
                             <th className="pb-2 text-right font-medium">Amount</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {inv.lines.map((l, i) => (
-                            <tr key={i} className="border-t border-slate-100">
-                              <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
-                              <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>
-                              <td className="py-2 text-right">{inr(l.rate)}</td>
-                              <td className="py-2 text-right">{inr(l.amount)}</td>
-                            </tr>
-                          ))}
+                          {inv.lines.map((l, i) => {
+                            const item = items.find(it => it.id === l.item_id)
+                            return (
+                              <tr key={i} className="border-t border-slate-100">
+                                <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
+                                <td className="py-2 text-right">{item ? qty(item.stock) : '-'} {item?.unit}</td>
+                                <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>
+                                <td className="py-2 text-right">{inr(l.rate)}</td>
+                                <td className="py-2 text-right">{inr(l.amount)}</td>
+                              </tr>
+                            )
+                          })}
                           {inv.tax > 0 && (
                             <tr className="border-t border-slate-200">
-                              <td colSpan={3} className="py-2 text-right font-medium">Tax</td>
+                              <td colSpan={4} className="py-2 text-right font-medium">Tax</td>
                               <td className="py-2 text-right">{inr(inv.tax)}</td>
                             </tr>
                           )}
                           {inv.discount > 0 && (
                             <tr className="border-t border-slate-200">
-                              <td colSpan={3} className="py-2 text-right font-medium">Discount</td>
+                              <td colSpan={4} className="py-2 text-right font-medium">Discount</td>
                               <td className="py-2 text-right text-red-600">-{inr(inv.discount)}</td>
                             </tr>
                           )}
                           <tr className="border-t-2 border-slate-300">
-                            <td colSpan={3} className="py-2 text-right font-semibold">Total</td>
+                            <td colSpan={4} className="py-2 text-right font-semibold">Total</td>
                             <td className="py-2 text-right font-semibold">{inr(inv.total)}</td>
                           </tr>
                         </tbody>
