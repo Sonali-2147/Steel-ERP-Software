@@ -499,7 +499,7 @@ export default function PurchaseBills() {
 }
 
 function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | null; onClose: () => void; onSuccess: () => void }) {
-  const { suppliers, items, notify } = useStore()
+  const { suppliers, items, notify, refresh } = useStore()
   const [busy, setBusy] = useState(false)
   const [billNo, setBillNo] = useState(bill?.bill_no || '')
   const [date, setDate] = useState(bill?.date || todayISO())
@@ -560,6 +560,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
         await api.createPurchaseBill(input)
         notify('Purchase bill created')
       }
+      refresh()
       onSuccess()
       onClose()
     } catch (err) { notify((err as Error).message, 'error') } finally { setBusy(false) }
@@ -596,7 +597,9 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
             <span className="font-semibold">Items</span>
             <Button size="sm" variant="ghost" onClick={addLine}><Plus size={14} /> Add Item</Button>
           </div>
-          {lines.map((l, i) => (
+          {lines.map((l, i) => {
+            const item = items.find(it => it.id === l.item_id)
+            return (
             <div key={i} className="mb-3 grid grid-cols-12 gap-2 items-end">
               <div className="col-span-5">
                 <SearchSelect
@@ -605,6 +608,11 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                   onChange={(v) => updateLine(i, 'item_id', v as number)}
                   options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
                 />
+                {item && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Current Stock: {qty(item.stock)} {item.unit}
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
@@ -621,7 +629,8 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="border-t border-slate-200 pt-4 grid grid-cols-3 gap-4">

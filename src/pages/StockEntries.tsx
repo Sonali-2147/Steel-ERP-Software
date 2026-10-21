@@ -184,7 +184,7 @@ let lineKey = 0
 const blankLine = (): FormLine => ({ key: ++lineKey, item_id: null, qty: '', rate: '' })
 
 function EntryForm({ type, entry, onClose, onSaved }: { type: EntryType; entry: Entry | null; onClose: () => void; onSaved: () => void }) {
-  const { items, suppliers, customers, notify } = useStore()
+  const { items, suppliers, customers, notify, refresh } = useStore()
   const isIn = type === 'IN'
   const parties = (isIn ? suppliers : customers).filter((p) => p.active || p.id === entry?.party_id)
   const [date, setDate] = useState(entry?.date ?? todayISO())
@@ -225,6 +225,7 @@ function EntryForm({ type, entry, onClose, onSaved }: { type: EntryType; entry: 
   const total = lines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.rate) || 0), 0)
 
   const save = async () => {
+    if (!partyId) return notify(`Please select a ${isIn ? 'supplier' : 'customer'}`, 'error')
     const valid = lines.filter((l) => l.item_id)
     if (valid.length === 0) return notify('Please select at least one item', 'error')
     if (valid.some((l) => !(Number(l.qty) > 0))) return notify('Please enter quantity for every item', 'error')
@@ -236,6 +237,7 @@ function EntryForm({ type, entry, onClose, onSaved }: { type: EntryType; entry: 
       }
       const saved = entry ? await api.updateEntry(entry.id, payload) : await api.createEntry(payload)
       notify(`${isIn ? 'Stock In' : 'Stock Out'} ${saved.entry_no} saved`)
+      refresh()
       onSaved()
       onClose()
     } catch (err) {
@@ -263,7 +265,7 @@ function EntryForm({ type, entry, onClose, onSaved }: { type: EntryType; entry: 
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Field label="Date" required><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
-        <Field label={isIn ? 'Supplier' : 'Customer'}>
+        <Field label={isIn ? 'Supplier' : 'Customer'} required>
           <SearchSelect
             placeholder={`Select ${isIn ? 'supplier' : 'customer'}`}
             value={partyId}

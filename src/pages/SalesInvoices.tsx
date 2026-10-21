@@ -500,7 +500,7 @@ export default function SalesInvoices() {
 }
 
 function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoice | null; onClose: () => void; onSuccess: () => void }) {
-  const { customers, items, notify } = useStore()
+  const { customers, items, notify, refresh } = useStore()
   const [busy, setBusy] = useState(false)
   const [invoiceNo, setInvoiceNo] = useState(invoice?.invoice_no || '')
   const [date, setDate] = useState(invoice?.date || todayISO())
@@ -561,6 +561,7 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
         await api.createSalesInvoice(input)
         notify('Sales invoice created')
       }
+      refresh()
       onSuccess()
       onClose()
     } catch (err) { notify((err as Error).message, 'error') } finally { setBusy(false) }
@@ -597,7 +598,9 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
             <span className="font-semibold">Items</span>
             <Button size="sm" variant="ghost" onClick={addLine}><Plus size={14} /> Add Item</Button>
           </div>
-          {lines.map((l, i) => (
+          {lines.map((l, i) => {
+            const item = items.find(it => it.id === l.item_id)
+            return (
             <div key={i} className="mb-3 grid grid-cols-12 gap-2 items-end">
               <div className="col-span-5">
                 <SearchSelect
@@ -606,6 +609,11 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
                   onChange={(v) => updateLine(i, 'item_id', v as number)}
                   options={items.map((item) => ({ value: item.id, label: item.name, sub: `${item.code} - ${item.unit}` }))}
                 />
+                {item && (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Current Stock: {qty(item.stock)} {item.unit}
+                  </div>
+                )}
               </div>
               <div className="col-span-2">
                 <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
@@ -622,7 +630,8 @@ function SalesInvoiceForm({ invoice, onClose, onSuccess }: { invoice: SalesInvoi
                 )}
               </div>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         <div className="border-t border-slate-200 pt-4 grid grid-cols-3 gap-4">
