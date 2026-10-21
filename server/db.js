@@ -227,7 +227,8 @@ export function initDb() {
   const { c } = db.prepare('SELECT COUNT(*) AS c FROM items').get()
   if (c === 0 && process.env.SKIP_SEED !== '1') seedCatalog()
 
-  if (process.env.SKIP_SEED !== '1') {
+  const shouldSeedDemoData = process.env.SEED_DEMO === '1'
+  if (shouldSeedDemoData) {
     const purchaseCount = db.prepare('SELECT COUNT(*) AS c FROM purchase_bills').get().c
     const salesCount = db.prepare('SELECT COUNT(*) AS c FROM sales_invoices').get().c
     const entryCount = db.prepare('SELECT COUNT(*) AS c FROM entries').get().c
