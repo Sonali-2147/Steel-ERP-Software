@@ -1,11 +1,13 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, Download, FileText, Plus, Printer, Trash2 } from 'lucide-react'
+import { ChevronRight, Download, FileText, MessageCircle, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
+import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
+import { createDocumentPdf, downloadPdfFile, sharePdfFile } from '@/lib/documentPdf'
 import { useStore } from '@/lib/store'
 import type { Quotation, QuotationInput, QuotationLine } from '@/lib/types'
 
@@ -71,7 +73,9 @@ export default function Quotations() {
       <head>
         <title>Quotation - ${quotation.quotation_no}</title>
         <style>
+          @page { size: A4 portrait; margin: 15mm 10mm; }
           body { font-family: 'Arial', sans-serif; padding: 20px; font-size: 11px; color: #333; }
+          body::after { content: ""; position: fixed; inset: 0; border: 1px solid #64748b; pointer-events: none; z-index: 9999; }
           .container { max-width: 800px; margin: 0 auto; }
           .header { text-align: center; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 10px; }
           .header h1 { margin: 0; font-size: 22px; font-weight: bold; color: #1a1a1a; }
@@ -99,7 +103,11 @@ export default function Quotations() {
           .amount-words { margin-top: 15px; font-style: italic; font-size: 11px; }
           .note { margin-top: 15px; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; }
           .declaration { margin-top: 20px; font-size: 10px; color: #666; text-align: center; }
-          @media print { body { padding: 0; } .no-print { display: none; } }
+          @media print {
+            body { margin: 0; padding: 0; }
+            .no-print { display: none; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
         </style>
       </head>
       <body>
@@ -207,6 +215,77 @@ export default function Quotations() {
     printWindow.document.close()
   }
 
+  const shareQuotation = async (quotation: Quotation) => {
+    const shareWindow = window.open('about:blank', '_blank')
+    if (!shareWindow) {
+      notify('Allow pop-ups to open the email or WhatsApp draft.', 'error')
+      return
+    }
+
+    try {
+      const fullQuotation = await api.getQuotation(quotation.id)
+      const recipientName = fullQuotation.supplier_name || quotation.supplier_name || 'Customer'
+      const message = [
+        `Hello ${recipientName},`,
+        '',
+        `Please find attached Quotation ${fullQuotation.quotation_no}, dated ${fmtDate(fullQuotation.date)}.`,
+        `Total: ${inr(fullQuotation.total)}`,
+        '',
+        `Regards, ${BUSINESS_NAME}`,
+        `Contact: ${BUSINESS_PHONE}`,
+      ].join('\n')
+      const file = createDocumentPdf({
+        title: 'Quotation',
+        number: fullQuotation.quotation_no,
+        date: fmtDate(fullQuotation.date),
+        partyLabel: 'Supplier',
+        partyName: recipientName,
+        partyAddress: fullQuotation.address,
+        partyPhone: fullQuotation.phone,
+        reference: fullQuotation.reference,
+        lines: (fullQuotation.lines || []).map(line => ({
+          name: line.name,
+          code: line.code,
+          qty: line.qty,
+          unit: line.unit,
+          rate: line.rate,
+          amount: line.amount,
+        })),
+        subtotal: fullQuotation.subtotal,
+        discount: fullQuotation.discount,
+        loadingAmount: fullQuotation.loading_amount,
+        unloadingAmount: fullQuotation.unloading_amount,
+        freightAmount: fullQuotation.freight_amount,
+        totalKg: fullQuotation.total_kg,
+        total: fullQuotation.total,
+        note: fullQuotation.note,
+      })
+      try {
+        if (await sharePdfFile(file, `Quotation ${fullQuotation.quotation_no}`, message)) {
+          shareWindow.close()
+          return
+        }
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          shareWindow.close()
+          return
+        }
+      }
+      downloadPdfFile(file)
+      const url = whatsappShareUrl({ phone: fullQuotation.phone }, message)
+      if (!url) {
+        shareWindow.close()
+        notify('PDF downloaded, but this supplier has no valid phone number for WhatsApp.', 'error')
+        return
+      }
+      shareWindow.location.href = url
+      notify('PDF downloaded. WhatsApp is open; attach the downloaded PDF before sending.')
+    } catch (error) {
+      shareWindow.close()
+      notify((error as Error).message, 'error')
+    }
+  }
+
   const remove = async (q: Quotation) => {
     setConfirmDelete(q)
   }
@@ -301,8 +380,11 @@ export default function Quotations() {
                       <Button size="sm" variant="ghost" title="Print" onClick={(e) => { e.stopPropagation(); printQuotation(q) }}>
                         <Printer size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" title="Download PDF" onClick={(e) => { e.stopPropagation(); window.print() }}>
+                      <Button size="sm" variant="ghost" title="Save quotation as PDF" onClick={(e) => { e.stopPropagation(); printQuotation(q) }}>
                         <Download size={14} />
+                      </Button>
+                      <Button size="sm" variant="ghost" title="Open WhatsApp draft; log in as +91 8329531313 and attach the saved PDF" aria-label="Open WhatsApp draft for this quotation" onClick={(e) => { e.stopPropagation(); shareQuotation(q) }}>
+                        <MessageCircle size={14} fill="currentColor" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(q); setFormOpen(true) }}>
                         <FileText size={14} />

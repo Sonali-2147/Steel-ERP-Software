@@ -56,5 +56,13 @@ body {
 
 @media print {
   html, body, #root { height: auto; background: #fff; }
-  @page { margin: 12mm; }
+  @page { margin: 15mm 10mm; }
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    border: 1px solid #64748b;
+    pointer-events: none;
+    z-index: 9999;
+  }
 }

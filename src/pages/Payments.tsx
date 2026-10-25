@@ -115,7 +115,10 @@ export default function Payments({ type: fixedType }: { type?: 'IN' | 'OUT' }) {
           .amount { font-size: 18px; font-weight: bold; color: #2563eb; }
           .footer { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 50px; }
           .signature { text-align: center; border-top: 1px solid #ccc; padding-top: 10px; }
-          @media print { body { padding: 0; } }
+          @media print {
+            body { padding: 0; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
         </style>
       </head>
       <body>
@@ -212,7 +215,7 @@ export default function Payments({ type: fixedType }: { type?: 'IN' | 'OUT' }) {
                 <Td right>
                   <div className="flex justify-end gap-1">
                     <Button size="sm" variant="ghost" title="Print" onClick={() => printPayment(p)}><Printer size={14} /></Button>
-                    <Button size="sm" variant="ghost" title="Download PDF" onClick={() => window.print()}><Download size={14} /></Button>
+                    <Button size="sm" variant="ghost" title="Save voucher as PDF" onClick={() => printPayment(p)}><Download size={14} /></Button>
                     <Button size="sm" variant="ghost" title="Edit" onClick={() => { setEditing(p); setFormOpen(true) }}><Pencil size={14} /></Button>
                     <Button size="sm" variant="ghost" title="Delete" className="text-red-600" onClick={() => remove(p)}><Trash2 size={14} /></Button>
                   </div>

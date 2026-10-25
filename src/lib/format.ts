@@ -10,6 +10,45 @@ export const inrCompact = (n: number) => {
 export const qty = (n: number, unit?: string) =>
   `${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${unit ? ' ' + unit : ''}`
 
+export interface UnitTotal {
+  unit: string
+  qty: number
+  amount: number
+  items: string[]
+}
+
+export function unitTotals(lines: Array<{ unit?: string; name?: string; qty: number; amount: number }>): UnitTotal[] {
+  const totals = new Map<string, UnitTotal>()
+  for (const line of lines) {
+    const unit = line.unit?.trim() || '-'
+    const total = totals.get(unit) || { unit, qty: 0, amount: 0, items: [] }
+    total.qty += line.qty
+    total.amount += line.amount
+    if (line.name?.trim() && !total.items.includes(line.name.trim())) total.items.push(line.name.trim())
+    totals.set(unit, total)
+  }
+  return [...totals.values()].sort((a, b) => a.unit.localeCompare(b.unit))
+}
+
+export function itemUnitTotals(lines: Array<{ unit?: string; name?: string; qty: number; amount: number }>): Array<{
+  name: string
+  unit: string
+  qty: number
+  amount: number
+}> {
+  const totals = new Map<string, { name: string; unit: string; qty: number; amount: number }>()
+  for (const line of lines) {
+    const name = line.name?.trim() || 'Item'
+    const unit = line.unit?.trim() || '-'
+    const key = `${name.toLowerCase()}\0${unit.toLowerCase()}`
+    const total = totals.get(key) || { name, unit, qty: 0, amount: 0 }
+    total.qty += line.qty
+    total.amount += line.amount
+    totals.set(key, total)
+  }
+  return [...totals.values()]
+}
+
 const IST_TIMEZONE = 'Asia/Kolkata'
 
 const parseDateForDisplay = (iso: string) => {
@@ -18,7 +57,7 @@ const parseDateForDisplay = (iso: string) => {
   if (!value) return new Date(NaN)
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T00:00:00+05:30`)
   if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return new Date(value)
-  return new Date(`${value}+05:30`)
+  return new Date(`${value.replace(' ', 'T')}Z`)
 }
 
 export const todayISO = () => {

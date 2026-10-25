@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { amountInWords, fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
+import { amountInWords, fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO, unitTotals } from '@/lib/format'
 import { useStore } from '@/lib/store'
 import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
 
@@ -48,11 +48,21 @@ export default function PurchaseBills() {
   }
 
   const printBill = async (bill: PurchaseBill) => {
-    const fullBill = await api.getPurchaseBill(bill.id).catch(() => bill)
     const printWindow = window.open('', '_blank')
-    if (!printWindow) return
+    if (!printWindow) {
+      notify('Allow pop-ups to open the purchase bill for printing or PDF saving.', 'error')
+      return
+    }
+    let fullBill: PurchaseBill
+    try {
+      fullBill = await api.getPurchaseBill(bill.id)
+    } catch (error) {
+      printWindow.close()
+      notify((error as Error).message, 'error')
+      return
+    }
 
-    const totalQty = (fullBill.lines || []).reduce((sum, l) => sum + l.qty, 0)
+    const totalsByItem = itemUnitTotals(fullBill.lines || [])
     const supplierName = fullBill.supplier_name || bill.supplier_name || '-'
     const supplierAddress = fullBill.address || bill.address || '-'
     const supplierContact = fullBill.contact_person || bill.contact_person || '-'
@@ -64,86 +74,114 @@ export default function PurchaseBills() {
       <head>
         <title>Purchase Bill - ${bill.bill_no}</title>
         <style>
-          @page { size: A4; margin: 10mm; }
+          @page { size: A4 portrait; margin: 15mm 10mm; }
           * { box-sizing: border-box; }
           body {
             font-family: Arial, sans-serif;
-            font-size: 10px;
+            font-size: 12px;
             color: #222;
             margin: 0;
             padding: 5px;
           }
-          .invoice { width: 100%; border: 1px solid #000; }
+          body::after {
+            content: "";
+            position: fixed;
+            inset: 0;
+            border: 1px solid #64748b;
+            pointer-events: none;
+            z-index: 9999;
+          }
+          .invoice { width: 100%; border: 1px solid #cbd5e1; color: #1e293b; }
           .header {
             text-align: center;
             padding: 8px;
-            border-bottom: 1px solid #000;
+            border-bottom: 1px solid #1e3a5f;
+            background: #1e3a5f;
+            color: #fff;
           }
           .header h1 {
-            font-size: 18px;
+            font-size: 24px;
             margin: 0 0 4px;
             font-weight: bold;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
           }
-          .header p { margin: 2px 0; line-height: 1.3; font-size: 9px; }
+          .header p { margin: 3px 0; line-height: 1.4; font-size: 11px; color: #e2e8f0; }
           .invoice-title {
             text-align: center;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 18px;
             padding: 6px;
-            border-bottom: 1px solid #000;
+            border-bottom: 1px solid #cbd5e1;
             text-transform: uppercase;
+            background: #eaf1f8;
+            color: #1e3a5f;
           }
           .details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            border-bottom: 1px solid #000;
+            border-bottom: 1px solid #cbd5e1;
           }
-          .details-grid > div { padding: 8px; line-height: 1.6; font-size: 9px; }
-          .details-grid > div:first-child { border-right: 1px solid #000; }
+          .details-grid > div { padding: 10px; line-height: 1.6; font-size: 12px; }
+          .details-grid > div:first-child { border-right: 1px solid #cbd5e1; }
           .section-title {
             font-weight: bold;
             margin-bottom: 4px;
             text-transform: uppercase;
-            font-size: 10px;
+            font-size: 12px;
+            color: #1e3a5f;
           }
           .field-row { display: flex; margin-bottom: 2px; }
           .field-label { width: 140px; font-weight: bold; }
           .field-value { flex: 1; }
-          table { width: 100%; border-collapse: collapse; font-size: 9px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
           th, td {
-            border: 1px solid #000;
-            padding: 4px 3px;
+            border: 1px solid #cbd5e1;
+            padding: 5px 4px;
             vertical-align: top;
           }
-          th { text-align: center; font-weight: bold; background: #f5f5f5; }
+          th { text-align: center; font-weight: bold; background: #eaf1f8; color: #1e3a5f; }
           .right { text-align: right; white-space: nowrap; }
           .center { text-align: center; }
           .summary-section {
             padding: 8px;
-            border-bottom: 1px solid #000;
+            border-bottom: 1px solid #cbd5e1;
           }
+          .unit-totals {
+            border: 1px solid #93a9c2;
+            margin-top: 6px;
+            padding: 5px;
+            width: 45%;
+            background: #f8fafc;
+          }
+          .unit-totals .section-title { margin: 0 0 4px; }
+          .unit-total-list { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+          .unit-total-item { min-width: 0; padding: 3px 2px; border-bottom: 1px solid #cbd5e1; }
+          .unit-total-name { font-weight: bold; overflow-wrap: anywhere; }
+          .unit-total-values { display: flex; justify-content: space-between; gap: 4px; margin-top: 2px; white-space: nowrap; }
           .summary-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+          .summary-row strong, .summary-row:last-of-type { color: #1e3a5f; }
           .amount-words {
             padding: 6px 8px;
-            border-bottom: 1px solid #000;
+            border-bottom: 1px solid #cbd5e1;
             font-style: italic;
-            font-size: 9px;
+            font-size: 12px;
+            color: #475569;
           }
           .tax-summary-table { margin-top: 8px; }
           .tax-summary-table th, .tax-summary-table td { padding: 3px; }
           .bank-details {
             padding: 8px;
-            border-bottom: 1px solid #000;
-            font-size: 9px;
+            border-bottom: 1px solid #cbd5e1;
+            font-size: 10px;
           }
           .footer {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            border-top: 1px solid #000;
+            border-top: 1px solid #cbd5e1;
             min-height: 80px;
           }
-          .footer > div { padding: 8px; font-size: 9px; }
+          .footer > div { padding: 9px; font-size: 12px; }
           .footer > div:first-child { border-right: 1px solid #000; }
           .signature {
             text-align: right;
@@ -157,12 +195,16 @@ export default function PurchaseBills() {
           .computer-note {
             text-align: center;
             padding: 5px;
-            border-top: 1px solid #000;
-            font-size: 9px;
+            border-top: 1px solid #cbd5e1;
+            font-size: 12px;
           }
           @media print {
             body { padding: 0; }
-            .invoice, tr { break-inside: avoid; }
+            .header, .invoice-title, .details-grid, .unit-total-item, .summary-section, .amount-words, .bank-details, .footer, tr { break-inside: avoid; }
+            thead { display: table-header-group; }
+            tfoot { display: table-footer-group; }
+            .unit-total-list { display: block; }
+            * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         </style>
       </head>
@@ -175,8 +217,8 @@ export default function PurchaseBills() {
               Tal-Khanapur, Dist-Sangli, Maharashtra
             </p>
             <p>
-              <strong>GSTIN/UIN:</strong> 27AVTPC3234C2ZS | <strong>State Name:</strong> Maharashtra<br>
-              <strong>Contact:</strong> 9975981103 / 9421120822 | <strong>E-Mail:</strong> krishnasteelcorporation03@gmail.com
+              <strong>State:</strong> Maharashtra<br>
+              <strong>Contact:</strong> 8329531313 / 9421120822 | <strong>E-Mail:</strong> krishnasteelcorporation03@gmail.com
             </p>
           </div>
 
@@ -208,11 +250,11 @@ export default function PurchaseBills() {
             <thead>
               <tr>
                 <th style="width: 5%">SI</th>
-                <th style="width: 48%">Description of Goods</th>
+                <th style="width: 44%">Description of Goods</th>
                 <th style="width: 12%">Quantity</th>
                 <th style="width: 12%">Rate</th>
-                <th style="width: 8%">per</th>
-                <th style="width: 15%">Amount</th>
+                <th style="width: 8%">Unit</th>
+                <th style="width: 19%">Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -226,20 +268,29 @@ export default function PurchaseBills() {
                   <td class="right">${inr(l.amount)}</td>
                 </tr>
               `).join('')}
-              <tr>
-                <td colspan="2" class="right" style="font-weight: bold;">Total Quantity:</td>
-                <td colspan="2" class="right" style="font-weight: bold;">${qty(totalQty, 'kg')}</td>
-                <td colspan="2"></td>
-              </tr>
             </tbody>
           </table>
+
+          <div class="unit-totals">
+            <div class="section-title">Unit Totals</div>
+            <div class="unit-total-list">
+              ${totalsByItem.map((t) => `
+                <div class="unit-total-item">
+                  <div class="unit-total-name">Unit Total: ${t.name}</div>
+                  <div class="unit-total-values">
+                    <span>${qty(t.qty)} ${t.unit}</span>
+                    <span>${inr(t.amount)}</span>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
 
           <div class="summary-section">
             <div class="summary-row"><span>Subtotal:</span><span>${inr(bill.subtotal)}</span></div>
             <div class="summary-row"><span>Loading Amount:</span><span>${inr(bill.loading_amount)}</span></div>
             <div class="summary-row"><span>Unloading Amount:</span><span>${inr(bill.unloading_amount)}</span></div>
             <div class="summary-row"><span>Freight Amount:</span><span>${inr(bill.freight_amount)}</span></div>
-            <div class="summary-row"><span>Total KG:</span><span>${bill.total_kg}</span></div>
             <div class="summary-row"><span>Discount:</span><span>${inr(bill.discount)}</span></div>
             <div class="summary-row" style="font-weight: bold; margin-top: 4px;"><span>Total:</span><span>${inr(bill.total)}</span></div>
             <div style="margin-top: 4px; font-style: italic;">E. & O.E</div>
@@ -299,7 +350,7 @@ export default function PurchaseBills() {
   }
 
   const total = bills.reduce((s, b) => s + b.total, 0)
-  const totalKg = bills.reduce((s, b) => s + (Number(b.total_kg) || 0), 0)
+  const totalsByUnit = unitTotals(bills.flatMap((b) => b.lines || []))
 
   return (
     <div>
@@ -360,7 +411,7 @@ export default function PurchaseBills() {
                       <Button size="sm" variant="ghost" title="Print" onClick={(e) => { e.stopPropagation(); printBill(b) }}>
                         <Printer size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" title="Download PDF" onClick={(e) => { e.stopPropagation(); window.print() }}>
+                      <Button size="sm" variant="ghost" title="Save bill as PDF" onClick={(e) => { e.stopPropagation(); printBill(b) }}>
                         <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(b); setFormOpen(true) }}>
@@ -381,6 +432,7 @@ export default function PurchaseBills() {
                             <th className="pb-2 text-left font-medium">Item</th>
                             <th className="pb-2 text-right font-medium">Current Stock</th>
                             <th className="pb-2 text-right font-medium">Qty</th>
+                            <th className="pb-2 text-right font-medium">Unit</th>
                             <th className="pb-2 text-right font-medium">Rate</th>
                             <th className="pb-2 text-right font-medium">Amount</th>
                           </tr>
@@ -392,7 +444,8 @@ export default function PurchaseBills() {
                               <tr key={i} className="border-t border-slate-100">
                                 <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
                                 <td className="py-2 text-right">{item ? qty(item.stock) : '-'} {item?.unit}</td>
-                                <td className="py-2 text-right">{qty(l.qty)} {l.unit}</td>
+                                <td className="py-2 text-right">{qty(l.qty)}</td>
+                                <td className="py-2 text-right">{l.unit || '-'}</td>
                                 <td className="py-2 text-right">{inr(l.rate)}</td>
                                 <td className="py-2 text-right">{inr(l.amount)}</td>
                               </tr>
@@ -400,12 +453,12 @@ export default function PurchaseBills() {
                           })}
                           {b.discount > 0 && (
                             <tr className="border-t border-slate-200">
-                              <td colSpan={4} className="py-2 text-right font-medium">Discount</td>
+                              <td colSpan={5} className="py-2 text-right font-medium">Discount</td>
                               <td className="py-2 text-right text-red-600">-{inr(b.discount)}</td>
                             </tr>
                           )}
                           <tr className="border-t-2 border-slate-300">
-                            <td colSpan={4} className="py-2 text-right font-semibold">Net Total</td>
+                            <td colSpan={5} className="py-2 text-right font-semibold">Net Total</td>
                             <td className="py-2 text-right font-semibold">{inr(b.total)}</td>
                           </tr>
                         </tbody>
@@ -419,14 +472,38 @@ export default function PurchaseBills() {
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
-              <td colSpan={6} className="px-4 py-3 text-right">Total KG</td>
-              <td className="px-4 py-3 text-right tabular-nums">{qty(totalKg, 'kg')}</td>
-              <td className="px-4 py-3 text-right">Total Amount</td>
-              <td className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
+              <td colSpan={7} className="px-4 py-3 text-right">Invoice Total</td>
+              <td colSpan={2} className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
               <td />
             </tr>
           </tfoot>
         </Table>
+        <div className="overflow-x-auto border-t border-slate-200 p-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">Purchase totals by unit</h3>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-slate-500">
+              <tr>
+                <th className="pb-2 pl-3 font-medium">Items</th>
+                <th className="pb-2 text-right font-medium">Total Qty</th>
+                <th className="pb-2 pl-3 font-medium">Unit</th>
+                <th className="pb-2 text-right font-medium">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {totalsByUnit.map((t) => (
+                <tr key={t.unit} className="border-t border-slate-100">
+                  <td className="py-2 pl-3">{t.items.join(', ') || '-'}</td>
+                  <td className="py-2 text-right tabular-nums">{qty(t.qty)}</td>
+                  <td className="py-2 pl-3 font-medium">{t.unit}</td>
+                  <td className="py-2 text-right tabular-nums">{inr(t.amount)}</td>
+                </tr>
+              ))}
+              {totalsByUnit.length === 0 && (
+                <tr><td colSpan={4} className="py-3 text-center text-slate-400">No purchase quantities to total.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {formOpen && <PurchaseBillForm bill={editing} onClose={() => setFormOpen(false)} onSuccess={load} />}
@@ -461,7 +538,13 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   )
 
   const subtotal = lines.reduce((s, l) => s + (l.qty * l.rate), 0)
-  const totalKg = lines.reduce((s, l) => s + l.qty, 0)
+  const totalKg = lines.reduce((s, l) => s + (items.find((item) => item.id === l.item_id)?.unit === 'kg' ? l.qty : 0), 0)
+  const totalsByUnit = unitTotals(lines.map((l) => ({
+    unit: items.find((item) => item.id === l.item_id)?.unit,
+    name: items.find((item) => item.id === l.item_id)?.name,
+    qty: l.qty,
+    amount: l.amount,
+  })).filter((l) => l.unit))
   const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount
 
   const updateLine = (index: number, field: keyof PurchaseBillLine, value: number | null) => {
@@ -556,6 +639,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                 <tr>
                   <th className="px-3 py-2 font-medium">Item</th>
                   <th className="px-3 py-2 font-medium">Qty</th>
+                  <th className="px-3 py-2 font-medium">Unit</th>
                   <th className="px-3 py-2 font-medium">Rate</th>
                   <th className="px-3 py-2 text-right font-medium">Amount</th>
                   <th className="w-12 px-3 py-2 text-center font-medium"> </th>
@@ -582,6 +666,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                       <td className="px-3 py-3">
                         <Input type="number" step="0.01" value={l.qty || ''} onChange={(e) => updateLine(i, 'qty', parseFloat(e.target.value) || 0)} placeholder="Qty" />
                       </td>
+                      <td className="px-3 py-3 align-middle">{item?.unit || '-'}</td>
                       <td className="px-3 py-3">
                         <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
                       </td>
@@ -600,15 +685,29 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
             </table>
           </div>
 
-          <div className="mt-3 flex flex-col items-end gap-1 border-t border-slate-200 pt-3 text-sm text-slate-600">
-            <div>
-              <span className="mr-2 text-slate-500">Total KG:</span>
-              <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
-            </div>
-            <div>
-              <span className="mr-2 text-slate-500">Total Amount:</span>
-              <span className="font-semibold text-slate-900">{inr(subtotal)}</span>
-            </div>
+          <div className="mt-3 overflow-x-auto border-t border-slate-200 pt-3">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">Totals by unit</h3>
+            <table className="ml-auto min-w-[560px] text-sm">
+              <thead className="text-left text-slate-500">
+                <tr>
+                  <th className="pb-2 pl-3 font-medium">Items</th>
+                  <th className="pb-2 text-right font-medium">Qty</th>
+                  <th className="pb-2 pl-3 font-medium">Unit</th>
+                  <th className="pb-2 text-right font-medium">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totalsByUnit.map((t) => (
+                  <tr key={t.unit} className="border-t border-slate-100">
+                    <td className="py-2 pl-3">{t.items.join(', ') || '-'}</td>
+                    <td className="py-2 text-right">{qty(t.qty)}</td>
+                    <td className="py-2 pl-3 font-medium">{t.unit}</td>
+                    <td className="py-2 text-right">{inr(t.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-2 text-right text-sm text-slate-600">Subtotal: <b className="text-slate-900">{inr(subtotal)}</b></div>
           </div>
         </div>
 

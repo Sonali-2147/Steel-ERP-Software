@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, ChevronRight, Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
@@ -57,6 +57,80 @@ export default function StockEntries({ type }: { type: EntryType }) {
       refresh()
     } catch (err) { notify((err as Error).message, 'error') }
     setConfirmDelete(null)
+  }
+
+  const printEntry = (entry: Entry) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      notify('Allow pop-ups to open this stock entry for printing or PDF saving.', 'error')
+      return
+    }
+    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[char]!)
+    const title = isIn ? 'Stock In Entry' : 'Stock Out Entry'
+    const lineRows = entry.lines.map((line, index) => `
+      <tr>
+        <td class="center">${index + 1}</td>
+        <td>${escapeHtml(line.item_name)} <span class="muted">${escapeHtml(line.item_code)}</span></td>
+        <td class="right">${qty(line.qty)}</td>
+        <td class="center">${escapeHtml(line.unit || '-')}</td>
+        <td class="right">${inr(line.rate)}</td>
+        <td class="right">${inr(line.qty * line.rate)}</td>
+      </tr>
+    `).join('')
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title} - ${escapeHtml(entry.entry_no)}</title>
+        <style>
+          @page { size: A4; margin: 15mm 10mm; }
+          * { box-sizing: border-box; }
+          body { margin: 0; font: 12px Arial, sans-serif; color: #1e293b; }
+          body::after { content: ""; position: fixed; inset: 0; border: 1px solid #64748b; pointer-events: none; z-index: 9999; }
+          .document { border: 1px solid #cbd5e1; }
+          header { padding: 16px; background: #1e3a5f; color: #fff; text-align: center; }
+          header h1 { margin: 0 0 5px; font-size: 23px; }
+          header p { margin: 0; color: #e2e8f0; }
+          h2 { margin: 0; padding: 9px; text-align: center; text-transform: uppercase; font-size: 17px; color: #1e3a5f; background: #eaf1f8; }
+          .details { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 14px; border-bottom: 1px solid #cbd5e1; }
+          .details div { margin: 3px 0; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th, td { padding: 7px 6px; border: 1px solid #cbd5e1; }
+          th { text-align: center; color: #1e3a5f; background: #eaf1f8; }
+          .center { text-align: center; }
+          .right { text-align: right; white-space: nowrap; }
+          .muted { color: #64748b; }
+          .total { padding: 12px; text-align: right; border-top: 1px solid #cbd5e1; font-size: 14px; font-weight: bold; color: #1e3a5f; }
+          .note { padding: 12px; border-top: 1px solid #cbd5e1; }
+          @media print { * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+        <main class="document">
+          <header><h1>Krishna Steel Corporation</h1><p>Stock Management</p></header>
+          <h2>${title}</h2>
+          <section class="details">
+            <div><div><b>Entry No:</b> ${escapeHtml(entry.entry_no)}</div><div><b>Date:</b> ${escapeHtml(fmtDate(entry.date))}</div><div><b>Time:</b> ${escapeHtml(fmtDateTime(entry.created_at || entry.date))}</div></div>
+            <div><div><b>${partyLabel}:</b> ${escapeHtml(entry.party_name || '-')}</div><div><b>Reference:</b> ${escapeHtml(entry.reference || '-')}</div></div>
+          </section>
+          <table>
+            <thead><tr><th>SI</th><th>Item</th><th>Qty</th><th>Unit</th><th>Rate</th><th>Amount</th></tr></thead>
+            <tbody>${lineRows}</tbody>
+          </table>
+          ${entry.note ? `<div class="note"><b>Note:</b> ${escapeHtml(entry.note)}</div>` : ''}
+          <div class="total">Total Amount: ${inr(entry.amount)}</div>
+        </main>
+        <script>window.onload = function() { window.print(); };</script>
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
   }
 
   const total = entries.reduce((s, e) => s + e.amount, 0)
@@ -117,6 +191,8 @@ export default function StockEntries({ type }: { type: EntryType }) {
                   <Td right>{inr(e.amount)}</Td>
                   <Td right>
                     <div className="flex justify-end gap-1" onClick={(ev) => ev.stopPropagation()}>
+                      <Button size="sm" variant="ghost" title="Print entry" onClick={() => printEntry(e)}><Printer size={14} /></Button>
+                      <Button size="sm" variant="ghost" title="Save entry as PDF" onClick={() => printEntry(e)}><Download size={14} /></Button>
                       <Button size="sm" variant="ghost" title="Edit" onClick={() => { setEditing(e); setFormOpen(true) }}><Pencil size={14} /></Button>
                       <Button size="sm" variant="ghost" title="Delete" className="text-red-600" onClick={() => remove(e)}><Trash2 size={14} /></Button>
                     </div>

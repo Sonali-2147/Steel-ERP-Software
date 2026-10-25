@@ -32,6 +32,7 @@ export default function Items() {
   const [params, setParams] = useSearchParams()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
+  const [unit, setUnit] = useState('')
   const [status, setStatus] = useState('active')
   const [page, setPage] = useState(1)
   const [editing, setEditing] = useState<Item | null>(null)
@@ -48,12 +49,14 @@ export default function Items() {
   }, [params, setParams])
 
   const categories = useMemo(() => [...new Set(items.map((i) => i.category).filter(Boolean))].sort(), [items])
+  const units = useMemo(() => [...new Set(items.map((i) => i.unit).filter(Boolean))].sort(), [items])
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase()
     return items.filter((i) => {
       if (s && !`${i.code} ${i.name} ${i.size} ${i.grade}`.toLowerCase().includes(s)) return false
       if (category && i.category !== category) return false
+      if (unit && i.unit !== unit) return false
       const st = stockStatus(i.stock, i.min_stock)
       if (status === 'active' && !i.active) return false
       if (status === 'inactive' && i.active) return false
@@ -61,12 +64,9 @@ export default function Items() {
       if (status === 'out' && (!i.active || st !== 'Out of Stock')) return false
       return true
     })
-  }, [items, q, category, status])
+  }, [items, q, category, unit, status])
 
-  useEffect(() => setPage(1), [q, category, status])
-
-  const totalKg = filtered.reduce((sum, i) => sum + i.stock, 0)
-  const totalAmount = filtered.reduce((sum, i) => sum + (i.stock * i.purchase_rate), 0)
+  useEffect(() => setPage(1), [q, category, unit, status])
 
   const exportCSV = () =>
     downloadCSV('items.csv', filtered.map((i) => ({
@@ -118,11 +118,15 @@ export default function Items() {
       />
 
       <Card>
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row">
+        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 md:flex-row md:flex-wrap">
           <SearchBox value={q} onChange={setQ} placeholder="Search by code, name, size…" className="md:w-80" />
           <Select value={category} onChange={(e) => setCategory(e.target.value)} className="md:w-52">
             <option value="">All categories</option>
             {categories.map((c) => <option key={c}>{c}</option>)}
+          </Select>
+          <Select value={unit} onChange={(e) => setUnit(e.target.value)} className="md:w-44">
+            <option value="">All units</option>
+            {units.map((u) => <option key={u}>{u}</option>)}
           </Select>
           <Select value={status} onChange={(e) => setStatus(e.target.value)} className="md:w-44">
             <option value="active">Active items</option>
@@ -168,16 +172,6 @@ export default function Items() {
           </tbody>
         </Table>
         <Pagination page={page} pageSize={PAGE} total={filtered.length} onPage={setPage} />
-        <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-end md:gap-8">
-          <div>
-            <span className="mr-2 text-slate-500">Total KG:</span>
-            <span className="font-semibold text-slate-900">{qty(totalKg, 'kg')}</span>
-          </div>
-          <div>
-            <span className="mr-2 text-slate-500">Total Amount:</span>
-            <span className="font-semibold text-slate-900">{inr(totalAmount)}</span>
-          </div>
-        </div>
       </Card>
 
       {formOpen && <ItemForm item={editing} categories={categories} onClose={() => setFormOpen(false)} />}
@@ -209,7 +203,7 @@ function ItemForm({ item, categories, onClose }: { item: Item | null; categories
   const [f, setF] = useState<ItemInput>(() => (item ? { ...EMPTY, ...item } : EMPTY))
   const [saving, setSaving] = useState(false)
   const set = <K extends keyof ItemInput>(k: K, v: ItemInput[K]) => setF((s) => ({ ...s, [k]: v }))
-  const numField = (k: 'opening_stock' | 'min_stock' | 'purchase_rate' | 'sale_rate' | 'gst_rate') => (
+  const numField = (k: 'opening_stock' | 'min_stock' | 'purchase_rate' | 'sale_rate') => (
     <Input type="number" min={0} step="any" value={f[k] || ''} onChange={(e) => set(k, Number(e.target.value))} placeholder="0" />
   )
 
@@ -271,10 +265,6 @@ function ItemForm({ item, categories, onClose }: { item: Item | null; categories
             <option value="0">Inactive</option>
           </Select>
         </Field>
-        <Field label="HSN Code">
-          <Input value={f.hsn_code} onChange={(e) => set('hsn_code', e.target.value)} placeholder="e.g. 7208" />
-        </Field>
-        <Field label="GST Rate (%)">{numField('gst_rate')}</Field>
         <Field label="Opening Stock" hint="Stock you already have when starting">{numField('opening_stock')}</Field>
         <Field label="Minimum Stock" hint="Alert when stock goes at or below this">{numField('min_stock')}</Field>
         <Field label="Purchase Rate (₹ per unit)">{numField('purchase_rate')}</Field>
