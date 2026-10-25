@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, Download, FileText, MessageCircle, Plus, Printer, Trash2 } from 'lucide-react'
+import { ChevronRight, Download, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
@@ -75,7 +75,7 @@ export default function SalesInvoices() {
     printWindow.document.write(`
       <html>
       <head>
-        <title>Quotation - ${invoice.invoice_no}</title>
+        <title>Sales Invoice - ${invoice.invoice_no}</title>
         <style>
           @page { size: A4 portrait; margin: 15mm 10mm; }
           * { box-sizing: border-box; }
@@ -225,7 +225,7 @@ export default function SalesInvoices() {
             </p>
           </div>
 
-          <div class="invoice-title">Quotation</div>
+          <div class="invoice-title">Sales Invoice</div>
 
           <div class="details-grid">
             <div>
@@ -234,13 +234,13 @@ export default function SalesInvoices() {
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">${fmtDate(invoice.date)}</span></div>
               <div class="field-row"><span class="field-label">Delivery Note:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Buyer's Order No.:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Customer's Order No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Dispatch Doc No.:</span><span class="field-value">-</span></div>
               <div class="field-row"><span class="field-label">Delivery Note Date:</span><span class="field-value">-</span></div>
             </div>
             <div>
-              <div class="section-title">Buyer (Bill to)</div>
+              <div class="section-title">Customer (Bill to)</div>
               <div class="field-row"><span class="field-label">Name:</span><span class="field-value">${customerName}</span></div>
               <div class="field-row"><span class="field-label">Address:</span><span class="field-value">${customerAddress}</span></div>
               <div class="field-row"><span class="field-label">Contact Person:</span><span class="field-value">${customerContact}</span></div>
@@ -349,6 +349,7 @@ export default function SalesInvoices() {
       const fullInvoice = await api.getSalesInvoice(invoice.id)
       const customerName = fullInvoice.customer_name || invoice.customer_name || 'Customer'
       const phone = fullInvoice.phone || invoice.phone
+      const totalsByItem = itemUnitTotals(fullInvoice.lines || [])
       const message = [
         `Hello ${customerName},`,
         '',
@@ -384,6 +385,7 @@ export default function SalesInvoices() {
         totalKg: fullInvoice.total_kg,
         total: fullInvoice.total,
         note: fullInvoice.note,
+        unitTotals: totalsByItem,
       })
       try {
         if (await sharePdfFile(file, `Sales Invoice ${fullInvoice.invoice_no}`, message)) {
@@ -490,8 +492,8 @@ export default function SalesInvoices() {
                       <Button size="sm" variant="ghost" title="Save invoice as PDF" onClick={(e) => { e.stopPropagation(); printInvoice(inv) }}>
                         <Download size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" title="Open WhatsApp draft; log in as +91 8329531313 and attach the saved PDF" aria-label="Open WhatsApp draft for this sales invoice" onClick={(e) => { e.stopPropagation(); shareInvoice(inv) }}>
-                        <MessageCircle size={14} fill="currentColor" />
+                      <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareInvoice(inv) }} className="text-[#25D366] hover:bg-[#25D366]/10">
+                        <img src="/whatsapp.png" alt="WhatsApp" width="14" height="14" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(inv); setFormOpen(true) }}>
                         <FileText size={14} />

@@ -347,6 +347,7 @@ export default function PurchaseBills() {
       return
     }
 
+    const totalsByItem = itemUnitTotals(fullBill.lines || [])
     const pdfFile = createDocumentPdf({
       title: 'Purchase Bill',
       number: bill.bill_no,
@@ -373,6 +374,7 @@ export default function PurchaseBills() {
       totalKg: bill.total_kg,
       total: bill.total,
       note: bill.note,
+      unitTotals: totalsByItem,
     })
 
     const message = `${BUSINESS_NAME}\n` +

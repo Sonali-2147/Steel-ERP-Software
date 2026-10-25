@@ -1,11 +1,11 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronRight, Download, FileText, MessageCircle, Plus, Printer, Trash2 } from 'lucide-react'
+import { ChevronRight, Download, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO } from '@/lib/format'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, downloadPdfFile, sharePdfFile } from '@/lib/documentPdf'
 import { useStore } from '@/lib/store'
@@ -225,6 +225,7 @@ export default function Quotations() {
     try {
       const fullQuotation = await api.getQuotation(quotation.id)
       const recipientName = fullQuotation.supplier_name || quotation.supplier_name || 'Customer'
+      const totalsByItem = itemUnitTotals(fullQuotation.lines || [])
       const message = [
         `Hello ${recipientName},`,
         '',
@@ -259,6 +260,7 @@ export default function Quotations() {
         totalKg: fullQuotation.total_kg,
         total: fullQuotation.total,
         note: fullQuotation.note,
+        unitTotals: totalsByItem,
       })
       try {
         if (await sharePdfFile(file, `Quotation ${fullQuotation.quotation_no}`, message)) {
@@ -383,8 +385,8 @@ export default function Quotations() {
                       <Button size="sm" variant="ghost" title="Save quotation as PDF" onClick={(e) => { e.stopPropagation(); printQuotation(q) }}>
                         <Download size={14} />
                       </Button>
-                      <Button size="sm" variant="ghost" title="Open WhatsApp draft; log in as +91 8329531313 and attach the saved PDF" aria-label="Open WhatsApp draft for this quotation" onClick={(e) => { e.stopPropagation(); shareQuotation(q) }}>
-                        <MessageCircle size={14} fill="currentColor" />
+                      <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareQuotation(q) }} className="text-[#25D366] hover:bg-[#25D366]/10">
+                        <img src="/whatsapp.png" alt="WhatsApp" width="14" height="14" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(q); setFormOpen(true) }}>
                         <FileText size={14} />
