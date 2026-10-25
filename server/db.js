@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { clientItems } from './client_items.js'
-import { initBackup as initDbBackup, backupDatabase, hasBackup } from './dbBackup.js'
+import { initBackup as initDbBackup, backupDatabase } from './dbBackup.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const preferredDataDirs = [
