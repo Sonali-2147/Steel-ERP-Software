@@ -50,8 +50,8 @@ function createWindow() {
     title: 'Steel ERP'
   })
 
-  // Load the app from the built Vite dist folder
-  mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'))
+  // Load the app from the local server instead of file
+  mainWindow.loadURL('http://localhost:5000')
 
   mainWindow.on('closed', () => {
     mainWindow = null
