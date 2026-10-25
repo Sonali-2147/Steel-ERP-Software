@@ -4,21 +4,25 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+console.log('Starting Steel ERP Server...')
+console.log('This may take a few seconds...')
+console.log('')
+
 // Start the server
 const serverProcess = spawn('node', ['server/index.js'], {
   cwd: __dirname,
   env: { ...process.env, PORT: '5000' },
-  shell: true
+  shell: true,
+  stdio: 'inherit'
 })
 
-console.log('Starting Steel ERP Server...')
+let browserOpened = false
 
-serverProcess.stdout.on('data', (data) => {
-  console.log(`Server: ${data}`)
-  
-  // Open browser when server is ready
-  if (data.toString().includes('Server running')) {
+// Open browser after a delay (server should be ready by then)
+setTimeout(() => {
+  if (!browserOpened) {
     console.log('Opening application in browser...')
+    browserOpened = true
     const url = 'http://localhost:5000'
     
     // Platform-specific open command
@@ -26,17 +30,20 @@ serverProcess.stdout.on('data', (data) => {
                    process.platform === 'win32' ? 'start' : 'xdg-open'
     
     exec(`${openCmd} ${url}`, (err) => {
-      if (err) console.error('Could not open browser:', err)
+      if (err) {
+        console.error('Could not open browser automatically.')
+        console.log(`Please open your browser and go to: ${url}`)
+      } else {
+        console.log('Browser opened successfully!')
+      }
     })
   }
-})
-
-serverProcess.stderr.on('data', (data) => {
-  console.error(`Server Error: ${data}`)
-})
+}, 3000) // Wait 3 seconds for server to start
 
 serverProcess.on('close', (code) => {
-  console.log(`Server process exited with code ${code}`)
+  console.log('')
+  console.log('Server stopped.')
+  console.log('Press any key to close this window...')
   process.exit(code)
 })
 
