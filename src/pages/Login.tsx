@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowDownToLine, BarChart3, Boxes, CreditCard, Eye, EyeOff, FileText, Lock, LogIn, Package, Receipt, User, Users } from 'lucide-react'
+import { ArrowDownToLine, BarChart3, Boxes, CreditCard, Eye, EyeOff, FileText, Lock, LogIn, Package, Receipt, User, Users, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 
 const YEAR = new Date().getFullYear()
@@ -11,6 +11,14 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
+  const [changeUsername, setChangeUsername] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [changeError, setChangeError] = useState('')
+  const [changeSuccess, setChangeSuccess] = useState(false)
+  const [changeBusy, setChangeBusy] = useState(false)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,6 +30,45 @@ export default function Login() {
       setError((err as Error).message)
     } finally {
       setBusy(false)
+    }
+  }
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setChangeBusy(true)
+    setChangeError('')
+    setChangeSuccess(false)
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: changeUsername, password: currentPassword })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Login failed')
+
+      const changeResponse = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${data.token}`
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      })
+      const changeData = await changeResponse.json()
+      if (!changeResponse.ok) throw new Error(changeData.error || 'Password change failed')
+
+      setChangeSuccess(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setTimeout(() => {
+        setShowChangePassword(false)
+        setChangeSuccess(false)
+      }, 2000)
+    } catch (err) {
+      setChangeError((err as Error).message)
+    } finally {
+      setChangeBusy(false)
     }
   }
 
@@ -108,9 +155,106 @@ export default function Login() {
             className="group mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-steel-700 to-steel-500 text-sm font-semibold text-white shadow-lg shadow-steel-600/25 transition duration-200 hover:-translate-y-0.5 hover:from-steel-800 hover:to-steel-600 hover:shadow-xl hover:shadow-steel-600/30 active:translate-y-0 disabled:opacity-60">
             <LogIn size={17} className="transition-transform group-hover:translate-x-0.5" /> {busy ? 'Signing in…' : 'Sign In'}
           </button>
+          <button
+            type="button"
+            onClick={() => setShowChangePassword(true)}
+            className="mt-4 w-full text-center text-sm text-steel-600 hover:text-steel-700 underline decoration-steel-300 underline-offset-4"
+          >
+            Change Password
+          </button>
           <p className="mt-5 text-center text-xs text-slate-400">Authorized users only · © {YEAR} Krishna Steel Center</p>
         </form>
       </div>
+
+      {showChangePassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-slate-900">Change Password</h3>
+              <button
+                onClick={() => {
+                  setShowChangePassword(false)
+                  setChangeError('')
+                  setChangeSuccess(false)
+                  setCurrentPassword('')
+                  setNewPassword('')
+                  setChangeUsername('')
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {changeSuccess ? (
+              <div className="rounded-lg bg-green-50 p-4 text-center">
+                <div className="text-green-700 font-medium">Password changed successfully!</div>
+                <div className="mt-2 text-sm text-green-600">You can now sign in with your new password.</div>
+              </div>
+            ) : (
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Username</label>
+                  <input
+                    type="text"
+                    required
+                    value={changeUsername}
+                    onChange={(e) => setChangeUsername(e.target.value)}
+                    placeholder="Enter your username"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-steel-500 focus:outline-none focus:ring-2 focus:ring-steel-500/20"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Current Password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? 'text' : 'password'}
+                      required
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Enter current password"
+                      className="h-11 w-full rounded-lg border border-slate-300 px-3 pr-10 text-sm focus:border-steel-500 focus:outline-none focus:ring-2 focus:ring-steel-500/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                    >
+                      {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password (min 6 characters)"
+                    className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm focus:border-steel-500 focus:outline-none focus:ring-2 focus:ring-steel-500/20"
+                  />
+                </div>
+
+                {changeError && (
+                  <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{changeError}</div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changeBusy}
+                  className="h-11 w-full rounded-xl bg-gradient-to-r from-steel-700 to-steel-500 text-sm font-semibold text-white shadow-lg shadow-steel-600/25 transition duration-200 hover:-translate-y-0.5 hover:from-steel-800 hover:to-steel-600 hover:shadow-xl hover:shadow-steel-600/30 active:translate-y-0 disabled:opacity-60"
+                >
+                  {changeBusy ? 'Changing…' : 'Change Password'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
