@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { clientItems } from './client_items.js'
+import { initBackup as initDbBackup, backupDatabase, hasBackup } from './dbBackup.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const preferredDataDirs = [
@@ -60,6 +61,9 @@ function migrateLegacyDbIfNeeded() {
 }
 
 migrateLegacyDbIfNeeded()
+
+// Initialize backup system (non-blocking)
+initDbBackup(activeDbPath).catch(err => console.error('Backup init failed:', err))
 
 export const db = new DatabaseSync(activeDbPath)
 db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;')
@@ -399,4 +403,9 @@ export function transaction(fn) {
     db.exec('ROLLBACK')
     throw err
   }
+}
+
+export async function manualBackup() {
+  console.log('Manual backup triggered')
+  return await backupDatabase(activeDbPath)
 }

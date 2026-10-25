@@ -3,7 +3,7 @@ import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { db, initDb, transaction } from './db.js'
+import { db, initDb, transaction, manualBackup } from './db.js'
 import { setupAuth } from './auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -146,6 +146,10 @@ function nextPaymentVoucherNo(type) {
 setupAuth(app)
 
 app.get('/api/health', route(() => ({ status: 'ok' })))
+
+app.post('/api/backup', route(async () => {
+  return await manualBackup()
+}))
 
 // ------------------------------------------------------------------
 // Items

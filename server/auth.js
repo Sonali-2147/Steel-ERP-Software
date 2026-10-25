@@ -44,7 +44,7 @@ function initAuth() {
 }
 
 function requireAuth(req, res, next) {
-  if (req.path === '/health') return next()
+  if (req.path === '/health' || req.path === '/backup') return next()
   const header = req.headers.authorization || ''
   const token = header.startsWith('Bearer ') ? header.slice(7) : ''
   const user = token && db.prepare(`

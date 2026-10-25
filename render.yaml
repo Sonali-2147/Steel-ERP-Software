@@ -7,8 +7,18 @@ services:
     envVars:
       - key: ADMIN_PASSWORD
         generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
       - key: DATA_DIR
         value: /data
+      - key: SUPABASE_URL
+        value: https://YOUR_SUPABASE_PROJECT_URL.supabase.co
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SEED_DEMO
+        value: 0
+      - key: SKIP_SEED
+        value: 0
     disk:
       name: data
       mountPath: /data
