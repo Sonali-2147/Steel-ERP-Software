@@ -1401,15 +1401,18 @@ app.get('/api/reports/payment-out-register', route((req) => {
   `).all(...params)
 }))
 
-// ------------------------------------------------------------------
-// Serve the built frontend (production)
-// ------------------------------------------------------------------
-const distDir = path.join(__dirname, '..', 'dist')
-if (fs.existsSync(distDir)) {
-  app.use(express.static(distDir))
-  app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(distDir, 'index.html')))
+// Only listen if not imported (for running in Electron main process)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  // Serve the built frontend (production)
+  const distDir = path.join(__dirname, '..', 'dist')
+  if (fs.existsSync(distDir)) {
+    app.use(express.static(distDir))
+    app.get(/^\/(?!api\/).*/, (req, res) => res.sendFile(path.join(distDir, 'index.html')))
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Krishna Steel Center running at http://localhost:${PORT}`)
+  })
 }
 
-app.listen(PORT, () => {
-  console.log(`Krishna Steel Center running at http://localhost:${PORT}`)
-})
+export default app

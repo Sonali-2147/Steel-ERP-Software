@@ -1,17 +1,20 @@
 appId: com.steel-erp.app
-productName: Steel ERP
+productName: Krishna Steel ERP
 directories:
-  output: dist-electron
+  output: dist-electron-new
   buildResources: build
 files:
   - dist/**/*
   - server/**/*
-  - electron-main.js
+  - electron-main.mjs
   - package.json
   - node_modules/**/*
+extraMetadata:
+  main: electron-main.mjs
+  type: module
 win:
   target:
-    - dir
+    - nsis
   signingHashAlgorithms: []
   signAndEditExecutable: false
 nsis:
