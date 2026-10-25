@@ -33,6 +33,9 @@ function resolveDataDir() {
 }
 
 const dataDir = resolveDataDir()
+console.log(`Using data directory: ${dataDir}`)
+console.log(`DATA_DIR env var: ${process.env.DATA_DIR}`)
+console.log(`RENDER env var: ${process.env.RENDER}`)
 if (process.env.DATA_DIR && dataDir !== process.env.DATA_DIR) {
   console.warn(`DATA_DIR ${process.env.DATA_DIR} is not writable; using ${dataDir} instead.`)
 } else if (process.env.RENDER && dataDir !== '/data') {
@@ -60,6 +63,7 @@ migrateLegacyDbIfNeeded()
 
 export const db = new DatabaseSync(activeDbPath)
 db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;')
+console.log(`Database initialized at: ${activeDbPath}`)
 
 function ensureColumn(tableName, columnName, columnDef) {
   const exists = db.prepare(`PRAGMA table_info(${tableName})`).all()

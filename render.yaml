@@ -13,3 +13,4 @@ services:
       name: data
       mountPath: /data
       sizeGB: 1
+      type: nvme
