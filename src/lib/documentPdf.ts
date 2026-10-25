@@ -166,7 +166,7 @@ export async function sharePdfFile(file: File, title: string, text: string): Pro
   return true
 }
 
-export function downloadPdfFile(file: File): void {
+export async function downloadPdfFile(file: File): Promise<void> {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url

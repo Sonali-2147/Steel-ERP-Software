@@ -6,6 +6,8 @@ import {
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import { amountInWords, fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO, unitTotals } from '@/lib/format'
+import { BUSINESS_NAME, whatsappShareUrl } from '@/lib/share'
+import { createDocumentPdf, downloadPdfFile } from '@/lib/documentPdf'
 import { useStore } from '@/lib/store'
 import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
 
@@ -69,7 +71,7 @@ export default function PurchaseBills() {
     const supplierPhone = fullBill.phone || bill.phone || '-'
     const supplierEmail = fullBill.email || bill.email || '-'
 
-    printWindow.document.write(`
+    const htmlContent = `
       <html>
       <head>
         <title>Purchase Bill - ${bill.bill_no}</title>
@@ -330,9 +332,90 @@ export default function PurchaseBills() {
         </script>
       </body>
       </html>
-    `)
+    `
 
+    printWindow.document.write(htmlContent)
     printWindow.document.close()
+  }
+
+  const shareToWhatsApp = async (bill: PurchaseBill) => {
+    let fullBill: PurchaseBill
+    try {
+      fullBill = await api.getPurchaseBill(bill.id)
+    } catch (error) {
+      notify((error as Error).message, 'error')
+      return
+    }
+
+    const pdfFile = createDocumentPdf({
+      title: 'Purchase Bill',
+      number: bill.bill_no,
+      date: bill.date,
+      partyLabel: 'Supplier',
+      partyName: fullBill.supplier_name || bill.supplier_name || '-',
+      partyAddress: fullBill.address || bill.address,
+      partyPhone: fullBill.phone || bill.phone,
+      reference: bill.reference,
+      lines: (fullBill.lines || []).map(l => ({
+        name: l.name,
+        code: l.code,
+        qty: l.qty,
+        unit: l.unit,
+        rate: l.rate,
+        amount: l.amount,
+      })),
+      subtotal: bill.subtotal,
+      tax: bill.tax,
+      discount: bill.discount,
+      loadingAmount: bill.loading_amount,
+      unloadingAmount: bill.unloading_amount,
+      freightAmount: bill.freight_amount,
+      totalKg: bill.total_kg,
+      total: bill.total,
+      note: bill.note,
+    })
+
+    const message = `${BUSINESS_NAME}\n` +
+      `Purchase Bill: ${bill.bill_no}\n` +
+      `Date: ${fmtDate(bill.date)}\n` +
+      `Supplier: ${fullBill.supplier_name || bill.supplier_name}\n` +
+      `Total: ${inr(bill.total)}`
+
+    // Try Web Share API first (works on mobile and some desktop browsers)
+    try {
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          files: [pdfFile],
+          title: `Purchase Bill ${bill.bill_no}`,
+          text: message,
+        })
+        return
+      }
+    } catch (error) {
+      // Share was canceled or not supported
+      if ((error as Error).name !== 'AbortError') {
+        console.log('Web Share not available:', error)
+      }
+    }
+
+    // Fallback: Try to open WhatsApp Desktop app with message
+    const waUrl = whatsappShareUrl({ phone: fullBill.phone }, message)
+    if (waUrl) {
+      // Try WhatsApp Desktop app protocol
+      const desktopUrl = waUrl.replace('https://wa.me/', 'whatsapp://')
+      window.location.href = desktopUrl
+      
+      // Also download PDF for manual attachment
+      setTimeout(() => {
+        downloadPdfFile(pdfFile)
+        notify('PDF downloaded. Please attach it in WhatsApp.')
+      }, 1000)
+    } else {
+      // Fallback to WhatsApp Web
+      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
+      downloadPdfFile(pdfFile)
+      notify('PDF downloaded. Please attach it in WhatsApp.')
+    }
   }
 
   const remove = async (b: PurchaseBill) => {
@@ -413,6 +496,9 @@ export default function PurchaseBills() {
                       </Button>
                       <Button size="sm" variant="ghost" title="Save bill as PDF" onClick={(e) => { e.stopPropagation(); printBill(b) }}>
                         <Download size={14} />
+                      </Button>
+                      <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareToWhatsApp(b) }} className="text-[#25D366] hover:bg-[#25D366]/10">
+                        <img src="/whatsapp.png" alt="WhatsApp" width="14" height="14" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(b); setFormOpen(true) }}>
                         <FileText size={14} />
