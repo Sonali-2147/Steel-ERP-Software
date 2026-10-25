@@ -5,6 +5,19 @@
 ### Windows Users
 Simply double-click the **"Start Steel ERP.bat"** file to launch the application.
 
+**What happens:**
+1. A command prompt window will open
+2. The server will start (takes 2-3 seconds)
+3. Your default browser will automatically open at `http://localhost:5000`
+4. The app is ready to use!
+
+**To stop:** Close the command prompt window or press Ctrl+C
+
+**If browser doesn't open automatically:**
+- Wait 3-5 seconds for the server to start
+- Manually open your browser
+- Go to: `http://localhost:5000`
+
 ### Mac/Linux Users
 Run the following command in the terminal:
 ```bash
