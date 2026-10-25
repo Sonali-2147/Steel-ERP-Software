@@ -1,0 +1,30 @@
+appId: com.steel-erp.app
+productName: Steel ERP
+directories:
+  output: dist-electron
+  buildResources: build
+files:
+  - dist/**/*
+  - server/**/*
+  - electron-main.js
+  - package.json
+  - node_modules/**/*
+win:
+  target:
+    - dir
+  signingHashAlgorithms: []
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  perMachine: false
+mac:
+  target:
+    - dmg
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Office

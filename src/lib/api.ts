@@ -4,7 +4,7 @@ import type {
 } from './types'
 
 const TOKEN_KEY = 'erp_token'
-const API_BASE = import.meta.env.DEV ? 'http://localhost:5000' : 'http://localhost:5000'
+const API_BASE = 'http://localhost:5000'
 
 export const authToken = {
   get: () => localStorage.getItem(TOKEN_KEY),
