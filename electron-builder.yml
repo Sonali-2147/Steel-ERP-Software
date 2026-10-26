@@ -7,8 +7,10 @@ files:
   - dist/**/*
   - server/**/*
   - electron-main.mjs
+  - preload.js
   - package.json
-  - node_modules/**/*
+  - node_modules/**
+asar: true
 extraMetadata:
   main: electron-main.mjs
   type: module

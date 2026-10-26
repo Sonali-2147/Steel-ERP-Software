@@ -44,7 +44,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.6",
     "cross-env": "^10.1.0",
-    "electron": "^28.3.3",
+    "electron": "^37.10.3",
     "electron-builder": "^24.13.3",
     "oxlint": "^1.81.0",
     "tailwindcss": "^4.3.3",

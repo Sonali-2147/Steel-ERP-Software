@@ -2,7 +2,7 @@ import express from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { db, initDb, transaction, manualBackup } from './db.js'
 import { setupAuth } from './auth.js'
 
@@ -1402,7 +1402,7 @@ app.get('/api/reports/payment-out-register', route((req) => {
 }))
 
 // Only listen if not imported (for running in Electron main process)
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // Serve the built frontend (production)
   const distDir = path.join(__dirname, '..', 'dist')
   if (fs.existsSync(distDir)) {
@@ -1415,4 +1415,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   })
 }
 
+// Export app for Electron
 export default app

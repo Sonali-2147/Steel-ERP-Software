@@ -256,17 +256,68 @@ export function createDocumentPdf(data: PdfDocument): File {
   return new File([pdf.output('blob')], `${fileName}.pdf`, { type: 'application/pdf' })
 }
 
-export async function sharePdfFile(file: File, title: string, text: string): Promise<boolean> {
-  if (!navigator.share || !navigator.canShare?.({ files: [file] })) return false
-  await navigator.share({ files: [file], title, text })
-  return true
-}
-
-export async function downloadPdfFile(file: File): Promise<void> {
+async function downloadPdfFile(file: File): Promise<void> {
   const url = URL.createObjectURL(file)
   const link = document.createElement('a')
   link.href = url
   link.download = file.name
   link.click()
   window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+interface SaveFileHandle {
+  createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>
+}
+
+declare global {
+  interface Window {
+    /** Exposed by preload.js in the desktop app. */
+    electronAPI?: {
+      savePdf?: (name: string, data: ArrayBuffer) => Promise<boolean>
+      openExternal?: (url: string) => Promise<void>
+    }
+    /** File System Access API (Chromium); not in the TS DOM lib. */
+    showSaveFilePicker?: (options: {
+      suggestedName: string
+      types: { description: string; accept: Record<string, string[]> }[]
+    }) => Promise<SaveFileHandle>
+  }
+}
+
+/**
+ * Asks the user where to save the PDF and waits until they answer.
+ * Resolves false when the save dialog is cancelled, so callers can stop there.
+ */
+export async function savePdfFile(file: File): Promise<boolean> {
+  const desktop = window.electronAPI
+  if (desktop?.savePdf) return desktop.savePdf(file.name, await file.arrayBuffer())
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: file.name,
+        types: [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }],
+      })
+      const writable = await handle.createWritable()
+      await writable.write(file)
+      await writable.close()
+      return true
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return false
+      throw error
+    }
+  }
+
+  await downloadPdfFile(file)
+  return true
+}
+
+/** Opens a web link in the user's default browser (desktop app) or a new tab. False if blocked. */
+export function openExternalUrl(url: string): boolean {
+  const desktop = window.electronAPI
+  if (desktop?.openExternal) {
+    void desktop.openExternal(url)
+    return true
+  }
+  return window.open(url, '_blank') !== null
 }

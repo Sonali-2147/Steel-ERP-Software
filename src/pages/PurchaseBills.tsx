@@ -7,7 +7,7 @@ import {
 import { api } from '@/lib/api'
 import { amountInWords, fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO, unitTotals } from '@/lib/format'
 import { BUSINESS_NAME, whatsappShareUrl } from '@/lib/share'
-import { createDocumentPdf, downloadPdfFile } from '@/lib/documentPdf'
+import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
 import { useStore } from '@/lib/store'
 import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
 
@@ -383,40 +383,20 @@ export default function PurchaseBills() {
       `Supplier: ${fullBill.supplier_name || bill.supplier_name}\n` +
       `Total: ${inr(bill.total)}`
 
-    // Try Web Share API first (works on mobile and some desktop browsers)
     try {
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({
-          files: [pdfFile],
-          title: `Purchase Bill ${bill.bill_no}`,
-          text: message,
-        })
+      if (!(await savePdfFile(pdfFile))) return
+      const waUrl = whatsappShareUrl({ phone: fullBill.phone }, message)
+      if (!waUrl) {
+        notify('PDF saved, but this supplier has no valid phone number for WhatsApp.', 'error')
         return
       }
-    } catch (error) {
-      // Share was canceled or not supported
-      if ((error as Error).name !== 'AbortError') {
-        console.log('Web Share not available:', error)
+      if (!openExternalUrl(waUrl)) {
+        notify('PDF saved. Allow pop-ups to open WhatsApp.', 'error')
+        return
       }
-    }
-
-    // Fallback: Try to open WhatsApp Desktop app with message
-    const waUrl = whatsappShareUrl({ phone: fullBill.phone }, message)
-    if (waUrl) {
-      // Try WhatsApp Desktop app protocol
-      const desktopUrl = waUrl.replace('https://wa.me/', 'whatsapp://')
-      window.location.href = desktopUrl
-      
-      // Also download PDF for manual attachment
-      setTimeout(() => {
-        downloadPdfFile(pdfFile)
-        notify('PDF downloaded. Please attach it in WhatsApp.')
-      }, 1000)
-    } else {
-      // Fallback to WhatsApp Web
-      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank')
-      downloadPdfFile(pdfFile)
-      notify('PDF downloaded. Please attach it in WhatsApp.')
+      notify('PDF saved. WhatsApp is open; attach the saved PDF before sending.')
+    } catch (error) {
+      notify((error as Error).message, 'error')
     }
   }
 
@@ -500,7 +480,7 @@ export default function PurchaseBills() {
                         <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareToWhatsApp(b) }} className="text-[#25D366] hover:bg-[#25D366]/10">
-                        <img src="/whatsapp.png" alt="WhatsApp" width="14" height="14" />
+                        <img src="./whatsapp.png" alt="WhatsApp" width="14" height="14" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(b); setFormOpen(true) }}>
                         <FileText size={14} />

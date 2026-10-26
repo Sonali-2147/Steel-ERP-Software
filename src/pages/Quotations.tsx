@@ -7,7 +7,7 @@ import {
 import { api } from '@/lib/api'
 import { fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO } from '@/lib/format'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
-import { createDocumentPdf, downloadPdfFile, sharePdfFile } from '@/lib/documentPdf'
+import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
 import { useStore } from '@/lib/store'
 import type { Quotation, QuotationInput, QuotationLine } from '@/lib/types'
 
@@ -216,12 +216,6 @@ export default function Quotations() {
   }
 
   const shareQuotation = async (quotation: Quotation) => {
-    const shareWindow = window.open('about:blank', '_blank')
-    if (!shareWindow) {
-      notify('Allow pop-ups to open the email or WhatsApp draft.', 'error')
-      return
-    }
-
     try {
       const fullQuotation = await api.getQuotation(quotation.id)
       const recipientName = fullQuotation.supplier_name || quotation.supplier_name || 'Customer'
@@ -262,28 +256,18 @@ export default function Quotations() {
         note: fullQuotation.note,
         unitTotals: totalsByItem,
       })
-      try {
-        if (await sharePdfFile(file, `Quotation ${fullQuotation.quotation_no}`, message)) {
-          shareWindow.close()
-          return
-        }
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') {
-          shareWindow.close()
-          return
-        }
-      }
-      downloadPdfFile(file)
+      if (!(await savePdfFile(file))) return
       const url = whatsappShareUrl({ phone: fullQuotation.phone }, message)
       if (!url) {
-        shareWindow.close()
-        notify('PDF downloaded, but this supplier has no valid phone number for WhatsApp.', 'error')
+        notify('PDF saved, but this supplier has no valid phone number for WhatsApp.', 'error')
         return
       }
-      shareWindow.location.href = url
-      notify('PDF downloaded. WhatsApp is open; attach the downloaded PDF before sending.')
+      if (!openExternalUrl(url)) {
+        notify('PDF saved. Allow pop-ups to open WhatsApp.', 'error')
+        return
+      }
+      notify('PDF saved. WhatsApp is open; attach the saved PDF before sending.')
     } catch (error) {
-      shareWindow.close()
       notify((error as Error).message, 'error')
     }
   }
@@ -386,7 +370,7 @@ export default function Quotations() {
                         <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareQuotation(q) }} className="text-[#25D366] hover:bg-[#25D366]/10">
-                        <img src="/whatsapp.png" alt="WhatsApp" width="14" height="14" />
+                        <img src="./whatsapp.png" alt="WhatsApp" width="14" height="14" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(q); setFormOpen(true) }}>
                         <FileText size={14} />
