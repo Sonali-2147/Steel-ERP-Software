@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { db, initDb, transaction, manualBackup } from './db.js'
 import { setupAuth } from './auth.js'
+import { setupLicence } from './licence.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -143,6 +144,7 @@ function nextPaymentVoucherNo(type) {
 // ------------------------------------------------------------------
 // Health
 // ------------------------------------------------------------------
+setupLicence(app)
 setupAuth(app)
 
 app.get('/api/health', route(() => ({ status: 'ok' })))

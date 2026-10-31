@@ -5,10 +5,15 @@ import './index.css'
 import App from './App'
 import { AuthProvider, useAuth } from './lib/auth'
 import { StoreProvider } from './lib/store'
+import { LicenceProvider, useLicence } from './lib/licence'
+import Activate from './pages/Activate'
 import Login from './pages/Login'
 
 function Root() {
   const { user, checking } = useAuth()
+  const { status } = useLicence()
+  if (!status) return null
+  if (!status.valid) return <Activate />
   if (checking) return null
   if (!user) return <Login />
   return (
@@ -22,8 +27,10 @@ function Root() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
-      <Root />
-    </AuthProvider>
+    <LicenceProvider>
+      <AuthProvider>
+        <Root />
+      </AuthProvider>
+    </LicenceProvider>
   </StrictMode>,
 )

@@ -359,3 +359,12 @@ export interface PaymentInput {
   purchase_bill_id?: number
   sales_invoice_id?: number
 }
+
+export interface LicenceStatus {
+  valid: boolean
+  machineId: string
+  reason?: 'missing' | 'invalid' | 'machine' | 'expired' | 'clock'
+  client?: string
+  expires?: string | null
+  daysLeft?: number | null
+}

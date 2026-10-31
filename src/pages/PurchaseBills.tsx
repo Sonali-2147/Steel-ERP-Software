@@ -6,6 +6,7 @@ import {
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import { amountInWords, fmtDate, fmtDateTime, inr2, itemUnitTotals, qty2, todayISO, unitTotals } from '@/lib/format'
+import { COPYRIGHT } from '@/lib/copyright'
 import { PAYMENT_MODES, paymentModeLabel } from '@/lib/paymentModes'
 import { BUSINESS_NAME, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
@@ -324,7 +325,7 @@ export default function PurchaseBills() {
           </div>
 
           <div class="computer-note">
-            This is a Computer Generated Purchase Bill
+            This is a Computer Generated Purchase Bill<br>${COPYRIGHT}
           </div>
         </div>
         <script>

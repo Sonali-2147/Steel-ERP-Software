@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { amountInWords } from './format'
+import { COPYRIGHT } from './copyright'
 import { BUSINESS_NAME } from './share'
 
 export interface PdfDocumentLine {
@@ -285,6 +286,9 @@ export function createDocumentPdf(data: PdfDocument): File {
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
   pdf.text('This is a Computer Generated Invoice', pageWidth / 2, y + 6, { align: 'center' })
+  pdf.setFontSize(8)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text(COPYRIGHT, pageWidth / 2, y + 11, { align: 'center' })
 
   // Border around every page, as in the printed copy
   const pageCount = pdf.getNumberOfPages()

@@ -1,5 +1,5 @@
 import type {
-  Dashboard, Entry, EntryInput, EntryType, ImportResult, Item, ItemInput, ItemLedger,
+  Dashboard, Entry, EntryInput, EntryType, ImportResult, Item, ItemInput, ItemLedger, LicenceStatus,
   Party, PartyInput, PartyType, Payment, PaymentInput, PurchaseBill, PurchaseBillInput, Quotation, QuotationInput, RegisterRow, SalesInvoice, SalesInvoiceInput, StockSummaryRow,
 } from './types'
 
@@ -32,6 +32,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     try {
       const body = await res.json()
       if (body.error) msg = body.error
+      if (res.status === 403 && body.code === 'LICENCE') window.dispatchEvent(new Event('erp:licence'))
     } catch {
       // ignore
     }
@@ -56,6 +57,8 @@ export interface User {
 }
 
 export const api = {
+  licenceStatus: () => request<LicenceStatus>('/api/licence/status'),
+  activateLicence: (key: string) => request<LicenceStatus>('/api/licence/activate', send('POST', { key })),
   login: (username: string, password: string) => request<{ token: string; user: User }>('/api/auth/login', send('POST', { username, password })),
   me: () => request<User>('/api/auth/me'),
   logout: () => request<{ success: boolean }>('/api/auth/logout', send('POST')),

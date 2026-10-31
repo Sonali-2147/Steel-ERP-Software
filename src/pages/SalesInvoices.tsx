@@ -6,6 +6,7 @@ import {
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import { amountInWords, fmtDate, fmtDateTime, inr2, itemUnitTotals, qty2, todayISO, unitTotals } from '@/lib/format'
+import { COPYRIGHT } from '@/lib/copyright'
 import { PAYMENT_MODES, paymentModeLabel } from '@/lib/paymentModes'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
@@ -325,7 +326,7 @@ export default function SalesInvoices() {
           </div>
 
           <div class="computer-note">
-            This is a Computer Generated Invoice
+            This is a Computer Generated Invoice<br>${COPYRIGHT}
           </div>
         </div>
         <script>

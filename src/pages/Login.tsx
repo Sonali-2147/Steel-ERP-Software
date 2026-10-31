@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { ArrowDownToLine, BarChart3, Boxes, CreditCard, Eye, EyeOff, FileText, Lock, LogIn, Package, Receipt, User, Users, X } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
+import { COPYRIGHT } from '@/lib/copyright'
 
-const YEAR = new Date().getFullYear()
 
 export default function Login() {
   const { login } = useAuth()
@@ -110,7 +110,7 @@ export default function Login() {
             ))}
           </ul>
         </div>
-        <div className="text-xs text-slate-400">© {YEAR} Krishna Steel Center</div>
+        <div className="text-xs text-slate-400">{COPYRIGHT}</div>
       </div>
 
       <div className="relative flex w-full items-center justify-center p-5 sm:p-8 lg:w-[480px] lg:bg-white lg:p-12 lg:shadow-2xl xl:w-[540px]">
@@ -162,7 +162,7 @@ export default function Login() {
           >
             Change Password
           </button>
-          <p className="mt-5 text-center text-xs text-slate-400">Authorized users only · © {YEAR} Krishna Steel Center</p>
+          <p className="mt-5 text-center text-xs text-slate-400">Authorized users only · {COPYRIGHT}</p>
         </form>
       </div>
 
