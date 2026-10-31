@@ -177,7 +177,7 @@ export interface PurchaseBill {
   freight_amount: number
   extra_charges: number
   payment_mode: PaymentMode | ''
-  amount_received: number
+  amount_paid: number
   total_kg: number
   total: number
   created_at: string
@@ -197,7 +197,7 @@ export interface PurchaseBillInput {
   freight_amount?: number
   extra_charges?: number
   payment_mode?: PaymentMode | ''
-  amount_received?: number
+  amount_paid?: number
   total_kg?: number
   lines: { item_id: number; qty: number; rate: number }[]
 }

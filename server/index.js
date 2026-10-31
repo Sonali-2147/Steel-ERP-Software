@@ -731,14 +731,14 @@ app.post('/api/purchase-bills', route((req) => {
     const freight_amount = num(body.freight_amount)
     const extra_charges = num(body.extra_charges)
     const payment_mode = str(body.payment_mode)
-    const amount_received = num(body.amount_received)
+    const amount_paid = num(body.amount_paid)
     const total_kg = lines.reduce((s, l) => s + num(l.qty), 0)
     const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount + extra_charges
 
     const info = db.prepare(`
-      INSERT INTO purchase_bills (bill_no, date, supplier_id, reference, note, subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, extra_charges, payment_mode, amount_received, total_kg, total)
+      INSERT INTO purchase_bills (bill_no, date, supplier_id, reference, note, subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, extra_charges, payment_mode, amount_paid, total_kg, total)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(billNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, extra_charges, payment_mode, amount_received, total_kg, total)
+    `).run(billNo, str(body.date) || today(), Number(body.supplier_id), str(body.reference), str(body.note), subtotal, tax, discount, loading_amount, unloading_amount, freight_amount, extra_charges, payment_mode, amount_paid, total_kg, total)
 
     const insertLine = db.prepare(`
       INSERT INTO purchase_bill_lines (bill_id, item_id, qty, rate, amount)
@@ -752,6 +752,7 @@ app.post('/api/purchase-bills', route((req) => {
     // Create stock entry for purchase
     const entryLines = lines.map(l => ({ item_id: l.item_id, qty: l.qty, rate: l.rate }))
     createStockEntry('IN', str(body.date) || today(), Number(body.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
+    syncLinkedPayment('bill', Number(info.lastInsertRowid), billNo, str(body.date) || today(), Number(body.supplier_id), amount_paid, payment_mode)
 
     return { id: info.lastInsertRowid, bill_no: billNo }
   })
@@ -777,13 +778,13 @@ app.put('/api/purchase-bills/:id', route((req) => {
     const freight_amount = num(body.freight_amount)
     const extra_charges = num(body.extra_charges)
     const payment_mode = str(body.payment_mode)
-    const amount_received = num(body.amount_received)
+    const amount_paid = num(body.amount_paid)
     const total_kg = lines.reduce((s, l) => s + Number(l.qty), 0)
     const total = subtotal + tax - discount + loading_amount + unloading_amount + freight_amount + extra_charges
 
     db.prepare(`
       UPDATE purchase_bills
-      SET bill_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, loading_amount = ?, unloading_amount = ?, freight_amount = ?, extra_charges = ?, payment_mode = ?, amount_received = ?, total_kg = ?, total = ?
+      SET bill_no = ?, date = ?, supplier_id = ?, reference = ?, note = ?, subtotal = ?, tax = ?, discount = ?, loading_amount = ?, unloading_amount = ?, freight_amount = ?, extra_charges = ?, payment_mode = ?, amount_paid = ?, total_kg = ?, total = ?
       WHERE id = ?
     `).run(
       billNo,
@@ -799,7 +800,7 @@ app.put('/api/purchase-bills/:id', route((req) => {
       freight_amount,
       extra_charges,
       payment_mode,
-      amount_received,
+      amount_paid,
       total_kg,
       total,
       id
@@ -819,6 +820,7 @@ app.put('/api/purchase-bills/:id', route((req) => {
 
     const entryLines = lines.map(l => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) }))
     createStockEntry('IN', date, Number(body.supplier_id ?? existing.supplier_id), `PB-${billNo}`, `Purchase Bill: ${billNo}`, entryLines)
+    syncLinkedPayment('bill', id, billNo, date, Number(body.supplier_id ?? existing.supplier_id), amount_paid, payment_mode)
 
     return { success: true }
   })
@@ -835,6 +837,7 @@ app.delete('/api/purchase-bills/:id', route((req) => {
     if (entry) {
       db.prepare('DELETE FROM entries WHERE id = ?').run(entry.id)
     }
+    db.prepare('DELETE FROM payments WHERE purchase_bill_id = ?').run(billId)
     db.prepare('DELETE FROM purchase_bills WHERE id = ?').run(billId)
   })
   return { success: true }
@@ -885,24 +888,31 @@ app.get('/api/sales-invoices/:id', route((req) => {
   return { ...invoice, lines }
 }))
 
-// Keeps one auto-created "Payment In" voucher in step with a sales invoice's Amount Received.
-function syncInvoicePayment(invoiceId, invoiceNo, date, customerId, amount, mode) {
-  const existing = db.prepare('SELECT id FROM payments WHERE sales_invoice_id = ? ORDER BY id LIMIT 1').get(invoiceId)
+// Keeps one auto-created payment voucher in step with a document's paid/received amount.
+// Sales invoice -> Payment In (IN, sales_invoice_id); purchase bill -> Payment Out (OUT, purchase_bill_id).
+const PAYMENT_LINKS = {
+  invoice: { type: 'IN', column: 'sales_invoice_id', verb: 'Received against Sales Invoice' },
+  bill: { type: 'OUT', column: 'purchase_bill_id', verb: 'Paid against Purchase Bill' },
+}
+
+function syncLinkedPayment(kind, docId, docNo, date, partyId, amount, mode) {
+  const link = PAYMENT_LINKS[kind]
+  const existing = db.prepare(`SELECT id FROM payments WHERE ${link.column} = ? ORDER BY id LIMIT 1`).get(docId)
   if (amount <= 0) {
-    if (existing) db.prepare('DELETE FROM payments WHERE sales_invoice_id = ?').run(invoiceId)
+    if (existing) db.prepare(`DELETE FROM payments WHERE ${link.column} = ?`).run(docId)
     return
   }
   const payMode = mode || 'cash'
-  const note = `Received against Sales Invoice ${invoiceNo}`
+  const note = `${link.verb} ${docNo}`
   if (existing) {
     db.prepare('UPDATE payments SET date = ?, party_id = ?, amount = ?, mode = ?, note = ? WHERE id = ?')
-      .run(date, customerId, amount, payMode, note, existing.id)
+      .run(date, partyId, amount, payMode, note, existing.id)
     return
   }
   db.prepare(`
-    INSERT INTO payments (voucher_no, type, date, party_id, amount, mode, note, sales_invoice_id)
-    VALUES (?, 'IN', ?, ?, ?, ?, ?, ?)
-  `).run(nextPaymentVoucherNo('IN'), date, customerId, amount, payMode, note, invoiceId)
+    INSERT INTO payments (voucher_no, type, date, party_id, amount, mode, note, ${link.column})
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(nextPaymentVoucherNo(link.type), link.type, date, partyId, amount, payMode, note, docId)
 }
 
 app.post('/api/sales-invoices', route((req) => {
@@ -943,7 +953,7 @@ app.post('/api/sales-invoices', route((req) => {
     const entryLines = lines.map(l => ({ item_id: l.item_id, qty: l.qty, rate: l.rate }))
     assertSufficientStockForOut(entryLines)
     createStockEntry('OUT', str(body.date) || today(), Number(body.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
-    syncInvoicePayment(Number(info.lastInsertRowid), invoiceNo, str(body.date) || today(), Number(body.customer_id), amount_received, payment_mode)
+    syncLinkedPayment('invoice', Number(info.lastInsertRowid), invoiceNo, str(body.date) || today(), Number(body.customer_id), amount_received, payment_mode)
 
     return { id: info.lastInsertRowid, invoice_no: invoiceNo }
   })
@@ -1014,7 +1024,7 @@ app.put('/api/sales-invoices/:id', route((req) => {
     const entryLines = lines.map(l => ({ item_id: Number(l.item_id), qty: Number(l.qty), rate: Number(l.rate) }))
     assertSufficientStockForOut(entryLines, oldLines)
     createStockEntry('OUT', date, Number(body.customer_id ?? existing.customer_id), `INV-${invoiceNo}`, `Sales Invoice: ${invoiceNo}`, entryLines)
-    syncInvoicePayment(id, invoiceNo, date, Number(body.customer_id ?? existing.customer_id), amount_received, payment_mode)
+    syncLinkedPayment('invoice', id, invoiceNo, date, Number(body.customer_id ?? existing.customer_id), amount_received, payment_mode)
 
     return { success: true }
   })

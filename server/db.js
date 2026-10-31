@@ -264,7 +264,7 @@ export function initDb() {
   ensureColumn('purchase_bills', 'total', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('purchase_bills', 'extra_charges', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('purchase_bills', 'payment_mode', "TEXT NOT NULL DEFAULT ''")
-  ensureColumn('purchase_bills', 'amount_received', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn('purchase_bills', 'amount_paid', 'REAL NOT NULL DEFAULT 0')
 
   ensureColumn('sales_invoices', 'subtotal', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('sales_invoices', 'tax', 'REAL NOT NULL DEFAULT 0')

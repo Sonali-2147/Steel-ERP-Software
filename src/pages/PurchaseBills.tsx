@@ -294,8 +294,8 @@ export default function PurchaseBills() {
             <div class="summary-row"><span>Discount:</span><span>${inr2(bill.discount)}</span></div>
             <div class="summary-row"><span>Extra Charges:</span><span>${inr2(bill.extra_charges)}</span></div>
             <div class="summary-row" style="font-weight: bold; margin-top: 16px; padding-bottom: 4px; border-bottom: 1px solid #1e3a5f;"><span>Total:</span><span>${inr2(bill.total)}</span></div>
-            <div class="summary-row" style="margin-top: 10px;"><span>Amount Received:</span><span>${inr2(bill.amount_received)}</span></div>
-            <div class="summary-row" style="font-weight: bold;"><span>Balance Amount:</span><span>${inr2(bill.total - bill.amount_received)}</span></div>
+            <div class="summary-row" style="margin-top: 10px;"><span>Amount Paid:</span><span>${inr2(bill.amount_paid)}</span></div>
+            <div class="summary-row" style="font-weight: bold;"><span>Balance Amount:</span><span>${inr2(bill.total - bill.amount_paid)}</span></div>
           </div>
 
           <div class="amount-words">
@@ -373,7 +373,8 @@ export default function PurchaseBills() {
       discount: bill.discount,
       extraCharges: bill.extra_charges,
       paymentMode: paymentModeLabel(bill.payment_mode),
-      amountReceived: bill.amount_received,
+      amountReceived: bill.amount_paid,
+      amountLabel: 'Amount Paid',
       loadingAmount: bill.loading_amount,
       unloadingAmount: bill.unloading_amount,
       freightAmount: bill.freight_amount,
@@ -542,12 +543,12 @@ export default function PurchaseBills() {
                             <td className="py-2 text-right font-semibold">{inr2(b.total)}</td>
                           </tr>
                           <tr>
-                            <td colSpan={5} className="py-2 text-right font-medium">Amount Received</td>
-                            <td className="py-2 text-right">{inr2(b.amount_received)}</td>
+                            <td colSpan={5} className="py-2 text-right font-medium">Amount Paid</td>
+                            <td className="py-2 text-right">{inr2(b.amount_paid)}</td>
                           </tr>
                           <tr>
                             <td colSpan={5} className="py-2 text-right font-medium">Balance Amount</td>
-                            <td className="py-2 text-right font-semibold">{inr2(b.total - b.amount_received)}</td>
+                            <td className="py-2 text-right font-semibold">{inr2(b.total - b.amount_paid)}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -623,7 +624,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   const [freightAmount, setFreightAmount] = useState(bill?.freight_amount || 0)
   const [extraCharges, setExtraCharges] = useState(bill?.extra_charges || 0)
   const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>(bill?.payment_mode || '')
-  const [amountReceived, setAmountReceived] = useState(bill?.amount_received || 0)
+  const [amountPaid, setAmountPaid] = useState(bill?.amount_paid || 0)
   const [lines, setLines] = useState<PurchaseBillLine[]>(
     bill?.lines?.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate, amount: l.amount })) || [{ item_id: 0, qty: 0, rate: 0, amount: 0 }]
   )
@@ -637,7 +638,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
     amount: l.amount,
   })).filter((l) => l.unit))
   const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount + extraCharges
-  const balance = total - amountReceived
+  const balance = total - amountPaid
 
   const updateLine = (index: number, field: keyof PurchaseBillLine, value: number | null) => {
     const newLines = [...lines]
@@ -679,7 +680,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
         freight_amount: freightAmount,
         extra_charges: extraCharges,
         payment_mode: paymentMode,
-        amount_received: amountReceived,
+        amount_paid: amountPaid,
         total_kg: totalKg,
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
@@ -842,8 +843,8 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
               <div className="mb-1 text-sm font-medium text-slate-700">Total</div>
               <div className="flex h-9 items-center text-lg font-bold">{inr2(total)}</div>
             </div>
-            <Field label="Amount Received">
-              <Input type="number" step="0.01" value={amountReceived || ''} onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            <Field label="Amount Paid">
+              <Input type="number" step="0.01" value={amountPaid || ''} onChange={(e) => setAmountPaid(parseFloat(e.target.value) || 0)} placeholder="0.00" />
             </Field>
             <div>
               <div className="mb-1 text-sm font-medium text-slate-700">Balance Amount</div>

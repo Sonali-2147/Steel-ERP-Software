@@ -35,6 +35,8 @@ export interface PdfDocument {
   extraCharges?: number
   paymentMode?: string
   amountReceived?: number
+  /** Label for the amountReceived row; defaults to 'Amount Received' (purchase bills use 'Amount Paid'). */
+  amountLabel?: string
   totalKg?: number
   total: number
   note?: string
@@ -209,7 +211,7 @@ export function createDocumentPdf(data: PdfDocument): File {
   ]
   if (data.amountReceived !== undefined) {
     summary.push(
-      { label: 'Amount Received:', value: money(data.amountReceived), gapBefore: 3 },
+      { label: `${data.amountLabel || 'Amount Received'}:`, value: money(data.amountReceived), gapBefore: 3 },
       { label: 'Balance Amount:', value: money(data.total - data.amountReceived), bold: true },
     )
   }
