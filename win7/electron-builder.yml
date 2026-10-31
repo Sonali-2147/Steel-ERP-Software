@@ -1,0 +1,18 @@
+appId: com.steel-erp.app
+productName: Krishna Steel ERP
+directories:
+  output: dist-electron-win7
+files:
+  - dist/**/*
+  - server/**/*
+  - electron-main.cjs
+  - preload.js
+  - package.json
+  - node_modules/**
+asar: false
+npmRebuild: false
+extraMetadata:
+  main: electron-main.cjs
+win:
+  target: zip
+  signAndEditExecutable: false

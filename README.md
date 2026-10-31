@@ -23,6 +23,10 @@ Columns: `Item Code, Item Name, Category, Grade, Size, Unit, Opening Stock, Min 
 Only **Item Name** is required; blank codes are generated automatically (`ITM-0001`…).
 Existing items (same code, or same name when code is blank) are skipped unless *Update items that already exist* is ticked.
 
+## Moving to another PC, licence lock, Windows 7 build
+
+See [docs/MOVE-TO-NEW-PC.md](docs/MOVE-TO-NEW-PC.md): how to rebuild the Windows 10/11 and Windows 7 zips, how the offline licence lock and key generator work, and where client data is stored.
+
 ## Running
 
 Requires Node.js 22.5+ (uses the built-in `node:sqlite`).

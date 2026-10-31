@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krishna Steel - Licence Key Generator</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Segoe UI, Arial, sans-serif; background: #eef2f7; color: #1e293b; }
+  .wrap { max-width: 720px; margin: 28px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: #1e3a5f; }
+  .sub { color: #64748b; margin: 0 0 18px; font-size: 14px; }
+  .card { background: #fff; border-radius: 14px; box-shadow: 0 4px 18px rgba(15,23,42,.08); padding: 20px; margin-bottom: 16px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 4px; }
+  input, select, textarea { width: 100%; padding: 10px 12px; font-size: 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-family: inherit; }
+  textarea { font-family: Consolas, monospace; font-size: 12px; }
+  button { padding: 10px 16px; font-size: 15px; font-weight: 600; border: 0; border-radius: 8px; background: #1e3a5f; color: #fff; cursor: pointer; }
+  button.light { background: #e2e8f0; color: #1e293b; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 150px; }
+  .msg { margin-top: 10px; font-size: 14px; }
+  .err { color: #b91c1c; } .ok { color: #047857; }
+  .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+  .hidden { display: none; }
+  .foot { text-align: center; color: #94a3b8; font-size: 12px; margin: 22px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Krishna Steel - Licence Key Generator</h1>
+  <p class="sub">Works offline in Chrome or Edge on any laptop. Keep this file private.</p>
+
+  <div class="card" id="lockCard">
+    <label for="pass">Passphrase</label>
+    <input id="pass" type="password" autocomplete="off" placeholder="Type your passphrase to unlock">
+    <div style="margin-top:12px"><button id="unlockBtn">Unlock</button></div>
+    <div class="msg err" id="lockMsg"></div>
+  </div>
+
+  <div class="card hidden" id="mainCard">
+    <label for="machine">Machine ID (copied from the client's "Activation required" screen)</label>
+    <input id="machine" placeholder="ABCD-1234-EF56-7890" autocomplete="off">
+    <label for="client">Client name</label>
+    <input id="client" placeholder="e.g. Krishna Steel" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="validity">Valid for</label>
+        <select id="validity">
+          <option value="1">1 month</option>
+          <option value="3">3 months</option>
+          <option value="6">6 months</option>
+          <option value="12" selected>1 year (12 months)</option>
+          <option value="24">2 years (24 months)</option>
+          <option value="lifetime">Never expires (lifetime)</option>
+          <option value="date">Until a chosen date...</option>
+        </select>
+      </div>
+      <div id="dateBox" class="hidden">
+        <label for="expDate">End date</label>
+        <input id="expDate" type="date">
+      </div>
+    </div>
+    <div style="margin-top:16px"><button id="makeBtn">Generate key</button></div>
+    <div class="msg" id="makeMsg"></div>
+
+    <div id="result" class="hidden">
+      <label for="keyOut">Licence key - send this whole text to the client</label>
+      <textarea id="keyOut" rows="6" readonly></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="copyBtn">Copy key</button>
+        <button id="saveBtn" class="light">Save as .txt</button>
+      </div>
+      <div class="hint" id="summary"></div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="logCard">
+    <strong>Keys made on this laptop</strong>
+    <div class="hint">Stored only in this browser, so the list is per laptop.</div>
+    <table id="logTable"><thead><tr><th>Date</th><th>Client</th><th>Machine</th><th>Ends</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card hidden" id="passCard">
+    <strong>Change passphrase</strong>
+    <div class="hint">This saves a new copy of this file locked with the new passphrase. Use the new file from then on and delete the old one.</div>
+    <label for="newPass">New passphrase (at least 8 characters)</label>
+    <input id="newPass" type="password" autocomplete="off">
+    <label for="newPass2">Type it again</label>
+    <input id="newPass2" type="password" autocomplete="off">
+    <div style="margin-top:12px"><button id="changeBtn" class="light">Save new file</button></div>
+    <div class="msg" id="changeMsg"></div>
+  </div>
+
+  <div class="foot">© Sonali Kadam. All rights reserved.</div>
+</div>
+
+<script id="vault" type="application/json">__VAULT__</script>
+<script>
+const SOURCE_HTML = '<!doctype html>\n' + document.documentElement.outerHTML
+
+// CORE-START
+const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+const fromB64 = (text) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
+const VAULT_ITERATIONS = 600000
+
+async function passphraseKey(passphrase, salt, iterations) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+}
+
+async function encryptVault(plainText, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const key = await passphraseKey(passphrase, salt, VAULT_ITERATIONS)
+  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plainText))
+  return JSON.stringify({ v: 1, iter: VAULT_ITERATIONS, salt: b64u(salt), iv: b64u(iv), data: b64u(data) })
+}
+
+async function decryptVault(vaultJson, passphrase) {
+  const vault = JSON.parse(vaultJson)
+  const key = await passphraseKey(passphrase, fromB64(vault.salt), vault.iter)
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(vault.iv) }, key, fromB64(vault.data))
+  return new TextDecoder().decode(plain)
+}
+
+/** options: { client, machine, validity: '1'|'3'|...|'lifetime'|'date', date?: 'YYYY-MM-DD' } */
+async function issueKey(jwkText, options, now = new Date()) {
+  const client = String(options.client || '').trim()
+  const machine = String(options.machine || '').trim().toUpperCase()
+  if (!client) throw new Error('Please type the client name.')
+  if (!/^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(machine)) throw new Error('Machine ID must look like ABCD-1234-EF56-7890. Copy it from the client\'s screen.')
+
+  let expires = null
+  if (options.validity === 'date') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(options.date || '') || Number.isNaN(Date.parse(options.date))) throw new Error('Please choose the end date.')
+    expires = options.date
+  } else if (options.validity !== 'lifetime') {
+    const months = Number(options.validity)
+    if (!Number.isInteger(months) || months < 1) throw new Error('Please choose how long the key should work.')
+    const end = new Date(now)
+    end.setUTCMonth(end.getUTCMonth() + months)
+    expires = end.toISOString().slice(0, 10)
+  }
+
+  const privateKey = await crypto.subtle.importKey('jwk', JSON.parse(jwkText), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign'])
+  const payload = new TextEncoder().encode(JSON.stringify({ client, machine, expires, issued: now.toISOString().slice(0, 10) }))
+  const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, payload)
+  return { key: `${b64u(payload)}.${b64u(signature)}`, client, machine, expires }
+}
+// CORE-END
+
+const $ = (id) => document.getElementById(id)
+const LOG_KEY = 'krishna_keys_issued'
+let jwkText = null
+
+const readLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]') } catch { return [] } }
+function renderLog() {
+  const rows = readLog().slice().reverse()
+  const body = $('logTable').querySelector('tbody')
+  body.innerHTML = ''
+  for (const row of rows) {
+    const tr = document.createElement('tr')
+    for (const text of [row.issued, row.client, row.machine, row.expires || 'never']) {
+      const td = document.createElement('td'); td.textContent = text; tr.appendChild(td)
+    }
+    const td = document.createElement('td')
+    const btn = document.createElement('button'); btn.className = 'light'; btn.textContent = 'Copy key'
+    btn.onclick = async () => { await navigator.clipboard.writeText(row.key); btn.textContent = 'Copied' }
+    td.appendChild(btn); tr.appendChild(td); body.appendChild(tr)
+  }
+}
+
+function showMain() {
+  for (const id of ['mainCard', 'logCard', 'passCard']) $(id).classList.remove('hidden')
+  $('lockCard').classList.add('hidden')
+  renderLog()
+}
+
+async function unlock() {
+  $('lockMsg').textContent = ''
+  $('unlockBtn').disabled = true
+  try {
+    jwkText = await decryptVault($('vault').textContent, $('pass').value)
+    $('pass').value = ''
+    showMain()
+  } catch {
+    $('lockMsg').textContent = 'Wrong passphrase. Try again.'
+  } finally {
+    $('unlockBtn').disabled = false
+  }
+}
+
+async function make() {
+  const msg = $('makeMsg')
+  msg.className = 'msg'; msg.textContent = ''
+  try {
+    const result = await issueKey(jwkText, { client: $('client').value, machine: $('machine').value, validity: $('validity').value, date: $('expDate').value })
+    $('keyOut').value = result.key
+    $('summary').textContent = `Client: ${result.client}  |  Machine: ${result.machine}  |  Ends: ${result.expires || 'never (lifetime)'}`
+    $('result').classList.remove('hidden')
+    const log = readLog()
+    log.push({ issued: new Date().toISOString().slice(0, 10), client: result.client, machine: result.machine, expires: result.expires, key: result.key })
+    localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-200)))
+    renderLog()
+    msg.className = 'msg ok'; msg.textContent = 'Key ready. Copy it and send it to the client.'
+  } catch (err) {
+    $('result').classList.add('hidden')
+    msg.className = 'msg err'; msg.textContent = err.message
+  }
+}
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const a = document.createElement('a'); a.href = url; a.download = name; a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function changePassphrase() {
+  const msg = $('changeMsg')
+  msg.className = 'msg err'; msg.textContent = ''
+  const a = $('newPass').value, b = $('newPass2').value
+  if (a.length < 8) { msg.textContent = 'Use at least 8 characters.'; return }
+  if (a !== b) { msg.textContent = 'The two passphrases do not match.'; return }
+  const vault = await encryptVault(jwkText, a)
+  const html = SOURCE_HTML.replace(/(<script id="vault" type="application\/json">)[\s\S]*?(<\/script>)/, (_m, open, close) => open + vault + close)
+  download('Krishna-Key-Generator.html', html, 'text/html')
+  $('newPass').value = ''; $('newPass2').value = ''
+  msg.className = 'msg ok'; msg.textContent = 'New file saved. Use it from now on and delete the old file.'
+}
+
+$('unlockBtn').onclick = unlock
+$('pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') unlock() })
+$('makeBtn').onclick = make
+$('validity').onchange = () => $('dateBox').classList.toggle('hidden', $('validity').value !== 'date')
+$('copyBtn').onclick = async () => { await navigator.clipboard.writeText($('keyOut').value); $('copyBtn').textContent = 'Copied'; setTimeout(() => { $('copyBtn').textContent = 'Copy key' }, 1500) }
+$('saveBtn').onclick = () => download('licence-key.txt', `${$('summary').textContent}\r\n\r\n${$('keyOut').value}\r\n`, 'text/plain')
+$('changeBtn').onclick = changePassphrase
+</script>
+</body>
+</html>

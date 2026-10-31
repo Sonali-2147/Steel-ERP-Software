@@ -25,3 +25,14 @@ dist-ssr
 server/data/
 .env
 dist-electron/
+
+# Build output
+.build-win7/
+.build-win7-cache/
+dist-win7/
+dist-electron-new/
+
+# Licence secrets: never commit these
+private.jwk.json
+Krishna-Key-Generator.html
+licence-key.txt
