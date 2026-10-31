@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO } from '@/lib/format'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
+import { WhatsAppIcon } from '@/components/WhatsAppIcon'
 import { useStore } from '@/lib/store'
 import type { Quotation, QuotationInput, QuotationLine } from '@/lib/types'
 
@@ -113,7 +114,7 @@ export default function Quotations() {
       <body>
         <div class="container">
           <div class="header">
-            <h1>KRISHNA STEEL CORPORATION</h1>
+            <h1>${BUSINESS_NAME.toUpperCase()}</h1>
             <p>Steel Stock Management System</p>
           </div>
           <div class="info-row">
@@ -237,6 +238,8 @@ export default function Quotations() {
         partyName: recipientName,
         partyAddress: fullQuotation.address,
         partyPhone: fullQuotation.phone,
+        partyContact: fullQuotation.contact_person,
+        partyEmail: fullQuotation.email,
         reference: fullQuotation.reference,
         lines: (fullQuotation.lines || []).map(line => ({
           name: line.name,
@@ -370,7 +373,7 @@ export default function Quotations() {
                         <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareQuotation(q) }} className="text-[#25D366] hover:bg-[#25D366]/10">
-                        <img src="./whatsapp.png" alt="WhatsApp" width="14" height="14" />
+                        <WhatsAppIcon size={18} />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(q); setFormOpen(true) }}>
                         <FileText size={14} />

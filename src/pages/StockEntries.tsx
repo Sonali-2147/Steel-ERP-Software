@@ -6,6 +6,7 @@ import {
 } from '@/components/ui'
 import { api } from '@/lib/api'
 import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
+import { BUSINESS_NAME } from '@/lib/share'
 import { useStore } from '@/lib/store'
 import type { Entry, EntryType } from '@/lib/types'
 
@@ -113,7 +114,7 @@ export default function StockEntries({ type }: { type: EntryType }) {
       </head>
       <body>
         <main class="document">
-          <header><h1>Krishna Steel Corporation</h1><p>Stock Management</p></header>
+          <header><h1>${BUSINESS_NAME}</h1><p>Stock Management</p></header>
           <h2>${title}</h2>
           <section class="details">
             <div><div><b>Entry No:</b> ${escapeHtml(entry.entry_no)}</div><div><b>Date:</b> ${escapeHtml(fmtDate(entry.date))}</div><div><b>Time:</b> ${escapeHtml(fmtDateTime(entry.created_at || entry.date))}</div></div>

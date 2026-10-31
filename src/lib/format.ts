@@ -1,5 +1,8 @@
 export const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 
+export const inr2 = (n: number) =>
+  '₹' + (n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 export const inrCompact = (n: number) => {
   const abs = Math.abs(n)
   if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`
@@ -9,6 +12,9 @@ export const inrCompact = (n: number) => {
 
 export const qty = (n: number, unit?: string) =>
   `${(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })}${unit ? ' ' + unit : ''}`
+
+export const qty2 = (n: number, unit?: string) =>
+  `${(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${unit ? ' ' + unit : ''}`
 
 export interface UnitTotal {
   unit: string

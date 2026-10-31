@@ -2,14 +2,16 @@ import { Fragment, useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ChevronRight, Download, FileText, Plus, Printer, Trash2 } from 'lucide-react'
 import {
-  Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Table, Td, Textarea, Th, Tr, cx,
+  Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { amountInWords, fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO, unitTotals } from '@/lib/format'
+import { amountInWords, fmtDate, fmtDateTime, inr2, itemUnitTotals, qty2, todayISO, unitTotals } from '@/lib/format'
+import { PAYMENT_MODES, paymentModeLabel } from '@/lib/paymentModes'
 import { BUSINESS_NAME, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
+import { WhatsAppIcon } from '@/components/WhatsAppIcon'
 import { useStore } from '@/lib/store'
-import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine } from '@/lib/types'
+import type { PurchaseBill, PurchaseBillInput, PurchaseBillLine, PaymentMode } from '@/lib/types'
 
 export default function PurchaseBills() {
   const { suppliers, items, notify, refresh } = useStore()
@@ -74,7 +76,7 @@ export default function PurchaseBills() {
     const htmlContent = `
       <html>
       <head>
-        <title>Purchase Bill - ${bill.bill_no}</title>
+        <title>Estimate - ${bill.bill_no}</title>
         <style>
           @page { size: A4 portrait; margin: 15mm 10mm; }
           * { box-sizing: border-box; }
@@ -213,18 +215,18 @@ export default function PurchaseBills() {
       <body>
         <div class="invoice">
           <div class="header">
-            <h1>Krishna Steel Corporation</h1>
+            <h1>${BUSINESS_NAME}</h1>
             <p>
               250/1/2, Near Gokul Hotel, Karad Road, Vita,<br>
               Tal-Khanapur, Dist-Sangli, Maharashtra
             </p>
             <p>
               <strong>State:</strong> Maharashtra<br>
-              <strong>Contact:</strong> 8329531313 / 9421120822 | <strong>E-Mail:</strong> krishnasteelcorporation03@gmail.com
+              <strong>Contact:</strong> 9975981103 / 9421120822 | <strong>E-Mail:</strong> krishnasteelcorporation03@gmail.com
             </p>
           </div>
 
-          <div class="invoice-title">Purchase Bill</div>
+          <div class="invoice-title">Estimate</div>
 
           <div class="details-grid">
             <div>
@@ -232,11 +234,7 @@ export default function PurchaseBills() {
               <div class="field-row"><span class="field-label">Bill No.:</span><span class="field-value">${bill.bill_no}</span></div>
               <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">${fmtDate(bill.date)}</span></div>
               <div class="field-row"><span class="field-label">Delivery Note:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Supplier's Order No.:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Dated:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Dispatch Doc No.:</span><span class="field-value">-</span></div>
-              <div class="field-row"><span class="field-label">Delivery Note Date:</span><span class="field-value">-</span></div>
+              <div class="field-row"><span class="field-label">Mode/Terms of Payment:</span><span class="field-value">${paymentModeLabel(bill.payment_mode)}</span></div>
             </div>
             <div>
               <div class="section-title">Supplier (Bill to)</div>
@@ -264,10 +262,10 @@ export default function PurchaseBills() {
                 <tr>
                   <td class="center">${i + 1}</td>
                   <td>${l.name}</td>
-                  <td class="right">${qty(l.qty)}</td>
-                  <td class="right">${inr(l.rate)}</td>
+                  <td class="right">${qty2(l.qty)}</td>
+                  <td class="right">${inr2(l.rate)}</td>
                   <td class="center">${l.unit}</td>
-                  <td class="right">${inr(l.amount)}</td>
+                  <td class="right">${inr2(l.amount)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -280,8 +278,8 @@ export default function PurchaseBills() {
                 <div class="unit-total-item">
                   <div class="unit-total-name">Unit Total: ${t.name}</div>
                   <div class="unit-total-values">
-                    <span>${qty(t.qty)} ${t.unit}</span>
-                    <span>${inr(t.amount)}</span>
+                    <span>${qty2(t.qty)} ${t.unit}</span>
+                    <span>${inr2(t.amount)}</span>
                   </div>
                 </div>
               `).join('')}
@@ -289,13 +287,15 @@ export default function PurchaseBills() {
           </div>
 
           <div class="summary-section">
-            <div class="summary-row"><span>Subtotal:</span><span>${inr(bill.subtotal)}</span></div>
-            <div class="summary-row"><span>Loading Amount:</span><span>${inr(bill.loading_amount)}</span></div>
-            <div class="summary-row"><span>Unloading Amount:</span><span>${inr(bill.unloading_amount)}</span></div>
-            <div class="summary-row"><span>Freight Amount:</span><span>${inr(bill.freight_amount)}</span></div>
-            <div class="summary-row"><span>Discount:</span><span>${inr(bill.discount)}</span></div>
-            <div class="summary-row" style="font-weight: bold; margin-top: 4px;"><span>Total:</span><span>${inr(bill.total)}</span></div>
-            <div style="margin-top: 4px; font-style: italic;">E. & O.E</div>
+            <div class="summary-row"><span>Subtotal:</span><span>${inr2(bill.subtotal)}</span></div>
+            <div class="summary-row"><span>Loading Amount:</span><span>${inr2(bill.loading_amount)}</span></div>
+            <div class="summary-row"><span>Unloading Amount:</span><span>${inr2(bill.unloading_amount)}</span></div>
+            <div class="summary-row"><span>Freight Amount:</span><span>${inr2(bill.freight_amount)}</span></div>
+            <div class="summary-row"><span>Discount:</span><span>${inr2(bill.discount)}</span></div>
+            <div class="summary-row"><span>Extra Charges:</span><span>${inr2(bill.extra_charges)}</span></div>
+            <div class="summary-row" style="font-weight: bold; margin-top: 16px; padding-bottom: 4px; border-bottom: 1px solid #1e3a5f;"><span>Total:</span><span>${inr2(bill.total)}</span></div>
+            <div class="summary-row" style="margin-top: 10px;"><span>Amount Received:</span><span>${inr2(bill.amount_received)}</span></div>
+            <div class="summary-row" style="font-weight: bold;"><span>Balance Amount:</span><span>${inr2(bill.total - bill.amount_received)}</span></div>
           </div>
 
           <div class="amount-words">
@@ -317,7 +317,7 @@ export default function PurchaseBills() {
               </p>
             </div>
             <div class="signature">
-              <strong>for Krishna Steel Corporation</strong>
+              <strong>for ${BUSINESS_NAME}</strong>
               <div class="sign-space"></div>
               <div class="sign-label">Authorised Signatory</div>
             </div>
@@ -349,13 +349,16 @@ export default function PurchaseBills() {
 
     const totalsByItem = itemUnitTotals(fullBill.lines || [])
     const pdfFile = createDocumentPdf({
-      title: 'Purchase Bill',
+      title: 'Estimate',
       number: bill.bill_no,
-      date: bill.date,
+      date: fmtDate(bill.date),
       partyLabel: 'Supplier',
       partyName: fullBill.supplier_name || bill.supplier_name || '-',
       partyAddress: fullBill.address || bill.address,
       partyPhone: fullBill.phone || bill.phone,
+      partyContact: fullBill.contact_person || bill.contact_person,
+      partyEmail: fullBill.email || bill.email,
+      detailsLabel: 'Bill',
       reference: bill.reference,
       lines: (fullBill.lines || []).map(l => ({
         name: l.name,
@@ -368,6 +371,9 @@ export default function PurchaseBills() {
       subtotal: bill.subtotal,
       tax: bill.tax,
       discount: bill.discount,
+      extraCharges: bill.extra_charges,
+      paymentMode: paymentModeLabel(bill.payment_mode),
+      amountReceived: bill.amount_received,
       loadingAmount: bill.loading_amount,
       unloadingAmount: bill.unloading_amount,
       freightAmount: bill.freight_amount,
@@ -381,7 +387,7 @@ export default function PurchaseBills() {
       `Purchase Bill: ${bill.bill_no}\n` +
       `Date: ${fmtDate(bill.date)}\n` +
       `Supplier: ${fullBill.supplier_name || bill.supplier_name}\n` +
-      `Total: ${inr(bill.total)}`
+      `Total: ${inr2(bill.total)}`
 
     try {
       if (!(await savePdfFile(pdfFile))) return
@@ -469,8 +475,8 @@ export default function PurchaseBills() {
                   <Td>{b.supplier_name}</Td>
                   <Td>{b.reference || '-'}</Td>
                   <Td>{b.lines?.length || 0} items</Td>
-                  <Td right>{inr(b.subtotal)}</Td>
-                  <Td right className="font-semibold">{inr(b.total)}</Td>
+                  <Td right>{inr2(b.subtotal)}</Td>
+                  <Td right className="font-semibold">{inr2(b.total)}</Td>
                   <Td right>
                     <div className="flex justify-end gap-1">
                       <Button size="sm" variant="ghost" title="Print" onClick={(e) => { e.stopPropagation(); printBill(b) }}>
@@ -480,7 +486,7 @@ export default function PurchaseBills() {
                         <Download size={14} />
                       </Button>
                       <Button size="sm" variant="ghost" title="Share to WhatsApp" onClick={(e) => { e.stopPropagation(); shareToWhatsApp(b) }} className="text-[#25D366] hover:bg-[#25D366]/10">
-                        <img src="./whatsapp.png" alt="WhatsApp" width="14" height="14" />
+                        <WhatsAppIcon size={18} />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditing(b); setFormOpen(true) }}>
                         <FileText size={14} />
@@ -511,23 +517,37 @@ export default function PurchaseBills() {
                             return (
                               <tr key={i} className="border-t border-slate-100">
                                 <td className="py-2">{l.name} <span className="text-slate-400">({l.code})</span></td>
-                                <td className="py-2 text-right">{item ? qty(item.stock) : '-'} {item?.unit}</td>
-                                <td className="py-2 text-right">{qty(l.qty)}</td>
+                                <td className="py-2 text-right">{item ? qty2(item.stock) : '-'} {item?.unit}</td>
+                                <td className="py-2 text-right">{qty2(l.qty)}</td>
                                 <td className="py-2 text-right">{l.unit || '-'}</td>
-                                <td className="py-2 text-right">{inr(l.rate)}</td>
-                                <td className="py-2 text-right">{inr(l.amount)}</td>
+                                <td className="py-2 text-right">{inr2(l.rate)}</td>
+                                <td className="py-2 text-right">{inr2(l.amount)}</td>
                               </tr>
                             )
                           })}
                           {b.discount > 0 && (
                             <tr className="border-t border-slate-200">
                               <td colSpan={5} className="py-2 text-right font-medium">Discount</td>
-                              <td className="py-2 text-right text-red-600">-{inr(b.discount)}</td>
+                              <td className="py-2 text-right text-red-600">-{inr2(b.discount)}</td>
+                            </tr>
+                          )}
+                          {b.extra_charges > 0 && (
+                            <tr className="border-t border-slate-200">
+                              <td colSpan={5} className="py-2 text-right font-medium">Extra Charges</td>
+                              <td className="py-2 text-right text-slate-900">{inr2(b.extra_charges)}</td>
                             </tr>
                           )}
                           <tr className="border-t-2 border-slate-300">
                             <td colSpan={5} className="py-2 text-right font-semibold">Net Total</td>
-                            <td className="py-2 text-right font-semibold">{inr(b.total)}</td>
+                            <td className="py-2 text-right font-semibold">{inr2(b.total)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={5} className="py-2 text-right font-medium">Amount Received</td>
+                            <td className="py-2 text-right">{inr2(b.amount_received)}</td>
+                          </tr>
+                          <tr>
+                            <td colSpan={5} className="py-2 text-right font-medium">Balance Amount</td>
+                            <td className="py-2 text-right font-semibold">{inr2(b.total - b.amount_received)}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -541,7 +561,7 @@ export default function PurchaseBills() {
           <tfoot>
             <tr className="bg-slate-50 font-semibold">
               <td colSpan={7} className="px-4 py-3 text-right">Invoice Total</td>
-              <td colSpan={2} className="px-4 py-3 text-right tabular-nums">{inr(total)}</td>
+              <td colSpan={2} className="px-4 py-3 text-right tabular-nums">{inr2(total)}</td>
               <td />
             </tr>
           </tfoot>
@@ -561,9 +581,9 @@ export default function PurchaseBills() {
               {totalsByUnit.map((t) => (
                 <tr key={t.unit} className="border-t border-slate-100">
                   <td className="py-2 pl-3">{t.items.join(', ') || '-'}</td>
-                  <td className="py-2 text-right tabular-nums">{qty(t.qty)}</td>
+                  <td className="py-2 text-right tabular-nums">{qty2(t.qty)}</td>
                   <td className="py-2 pl-3 font-medium">{t.unit}</td>
-                  <td className="py-2 text-right tabular-nums">{inr(t.amount)}</td>
+                  <td className="py-2 text-right tabular-nums">{inr2(t.amount)}</td>
                 </tr>
               ))}
               {totalsByUnit.length === 0 && (
@@ -601,6 +621,9 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
   const [loadingAmount, setLoadingAmount] = useState(bill?.loading_amount || 0)
   const [unloadingAmount, setUnloadingAmount] = useState(bill?.unloading_amount || 0)
   const [freightAmount, setFreightAmount] = useState(bill?.freight_amount || 0)
+  const [extraCharges, setExtraCharges] = useState(bill?.extra_charges || 0)
+  const [paymentMode, setPaymentMode] = useState<PaymentMode | ''>(bill?.payment_mode || '')
+  const [amountReceived, setAmountReceived] = useState(bill?.amount_received || 0)
   const [lines, setLines] = useState<PurchaseBillLine[]>(
     bill?.lines?.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate, amount: l.amount })) || [{ item_id: 0, qty: 0, rate: 0, amount: 0 }]
   )
@@ -613,7 +636,8 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
     qty: l.qty,
     amount: l.amount,
   })).filter((l) => l.unit))
-  const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount
+  const total = subtotal - discount + loadingAmount + unloadingAmount + freightAmount + extraCharges
+  const balance = total - amountReceived
 
   const updateLine = (index: number, field: keyof PurchaseBillLine, value: number | null) => {
     const newLines = [...lines]
@@ -653,6 +677,9 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
         loading_amount: loadingAmount,
         unloading_amount: unloadingAmount,
         freight_amount: freightAmount,
+        extra_charges: extraCharges,
+        payment_mode: paymentMode,
+        amount_received: amountReceived,
         total_kg: totalKg,
         lines: lines.map((l) => ({ item_id: l.item_id, qty: l.qty, rate: l.rate })),
       }
@@ -687,6 +714,12 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
             onChange={setSupplierId}
             options={suppliers.map((p) => ({ value: p.id, label: p.name, sub: p.city }))}
           />
+        </Field>
+        <Field label="Mode of Payment">
+          <Select value={paymentMode} onChange={(e) => setPaymentMode(e.target.value as PaymentMode | '')}>
+            <option value="">Select mode</option>
+            {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </Select>
         </Field>
         <Field label="Reference">
           <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Bill number, PO number, etc." />
@@ -727,7 +760,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                         />
                         {item && (
                           <div className="mt-1 text-xs text-slate-500">
-                            Current Stock: {qty(item.stock)} {item.unit}
+                            Current Stock: {qty2(item.stock)} {item.unit}
                           </div>
                         )}
                       </td>
@@ -739,7 +772,7 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                         <Input type="number" step="0.01" value={l.rate || ''} onChange={(e) => updateLine(i, 'rate', parseFloat(e.target.value) || 0)} placeholder="Rate" />
                       </td>
                       <td className="px-3 py-3 text-right align-middle font-medium text-slate-900">
-                        {inr(l.amount)}
+                        {inr2(l.amount)}
                       </td>
                       <td className="px-3 py-3 text-center align-middle">
                         {lines.length > 1 && (
@@ -768,14 +801,14 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
                 {totalsByUnit.map((t) => (
                   <tr key={t.unit} className="border-t border-slate-100">
                     <td className="py-2 pl-3">{t.items.join(', ') || '-'}</td>
-                    <td className="py-2 text-right">{qty(t.qty)}</td>
+                    <td className="py-2 text-right">{qty2(t.qty)}</td>
                     <td className="py-2 pl-3 font-medium">{t.unit}</td>
-                    <td className="py-2 text-right">{inr(t.amount)}</td>
+                    <td className="py-2 text-right">{inr2(t.amount)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="mt-2 text-right text-sm text-slate-600">Subtotal: <b className="text-slate-900">{inr(subtotal)}</b></div>
+            <div className="mt-2 text-right text-sm text-slate-600">Subtotal: <b className="text-slate-900">{inr2(subtotal)}</b></div>
           </div>
         </div>
 
@@ -796,9 +829,25 @@ function PurchaseBillForm({ bill, onClose, onSuccess }: { bill: PurchaseBill | n
             <Field label="Discount">
               <Input type="number" step="0.01" value={discount || ''} onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)} placeholder="0.00" />
             </Field>
-            <div className="flex flex-col justify-end">
-              <div className="text-sm text-slate-500">Subtotal: {inr(subtotal)}</div>
-              <div className="text-lg font-bold">{inr(total)}</div>
+            <Field label="Extra Charges">
+              <Input type="number" step="0.01" value={extraCharges || ''} onChange={(e) => setExtraCharges(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+          </div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-4">
+          <div className="mb-3 font-semibold">Payment Summary</div>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Total</div>
+              <div className="flex h-9 items-center text-lg font-bold">{inr2(total)}</div>
+            </div>
+            <Field label="Amount Received">
+              <Input type="number" step="0.01" value={amountReceived || ''} onChange={(e) => setAmountReceived(parseFloat(e.target.value) || 0)} placeholder="0.00" />
+            </Field>
+            <div>
+              <div className="mb-1 text-sm font-medium text-slate-700">Balance Amount</div>
+              <div className={cx('flex h-9 items-center text-lg font-bold', balance < 0 && 'text-red-600')}>{inr2(balance)}</div>
             </div>
           </div>
         </div>

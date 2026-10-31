@@ -175,6 +175,9 @@ export interface PurchaseBill {
   loading_amount: number
   unloading_amount: number
   freight_amount: number
+  extra_charges: number
+  payment_mode: PaymentMode | ''
+  amount_received: number
   total_kg: number
   total: number
   created_at: string
@@ -192,6 +195,9 @@ export interface PurchaseBillInput {
   loading_amount?: number
   unloading_amount?: number
   freight_amount?: number
+  extra_charges?: number
+  payment_mode?: PaymentMode | ''
+  amount_received?: number
   total_kg?: number
   lines: { item_id: number; qty: number; rate: number }[]
 }
@@ -230,6 +236,9 @@ export interface SalesInvoice {
   loading_amount: number
   unloading_amount: number
   freight_amount: number
+  extra_charges: number
+  payment_mode: PaymentMode | ''
+  amount_received: number
   total_kg: number
   total: number
   created_at: string
@@ -247,6 +256,9 @@ export interface SalesInvoiceInput {
   loading_amount?: number
   unloading_amount?: number
   freight_amount?: number
+  extra_charges?: number
+  payment_mode?: PaymentMode | ''
+  amount_received?: number
   total_kg?: number
   lines: { item_id: number; qty: number; rate: number }[]
 }

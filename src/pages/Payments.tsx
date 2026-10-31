@@ -3,17 +3,9 @@ import { Download, Pencil, Plus, Printer, Trash2 } from 'lucide-react'
 import { Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, Select, StatusBadge, Table, Td, Textarea, Th, Tr } from '@/components/ui'
 import { api } from '@/lib/api'
 import { downloadCSV, fmtDateTime, inr, todayISO } from '@/lib/format'
+import { PAYMENT_MODES } from '@/lib/paymentModes'
 import { useStore } from '@/lib/store'
 import type { Payment, PaymentInput, PaymentType, PaymentMode } from '@/lib/types'
-
-const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'upi', label: 'UPI' },
-  { value: 'card', label: 'Card' },
-  { value: 'other', label: 'Other' },
-]
 
 const DEFAULT_BANK = {
   accountName: 'Krishna Steel Center',

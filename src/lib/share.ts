@@ -1,5 +1,5 @@
-export const BUSINESS_NAME = 'Krishna Steel Corporation'
-export const BUSINESS_PHONE = '+91 8329531313'
+export const BUSINESS_NAME = 'Krishna Steel'
+export const BUSINESS_PHONE = '+91 9975981103'
 
 export function whatsappShareUrl(recipient: { phone?: string }, message: string): string | null {
   const digits = (recipient.phone || '').replace(/\D/g, '')

@@ -262,6 +262,9 @@ export function initDb() {
   ensureColumn('purchase_bills', 'freight_amount', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('purchase_bills', 'total_kg', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('purchase_bills', 'total', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn('purchase_bills', 'extra_charges', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn('purchase_bills', 'payment_mode', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn('purchase_bills', 'amount_received', 'REAL NOT NULL DEFAULT 0')
 
   ensureColumn('sales_invoices', 'subtotal', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('sales_invoices', 'tax', 'REAL NOT NULL DEFAULT 0')
@@ -271,6 +274,9 @@ export function initDb() {
   ensureColumn('sales_invoices', 'freight_amount', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('sales_invoices', 'total_kg', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('sales_invoices', 'total', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn('sales_invoices', 'extra_charges', 'REAL NOT NULL DEFAULT 0')
+  ensureColumn('sales_invoices', 'payment_mode', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn('sales_invoices', 'amount_received', 'REAL NOT NULL DEFAULT 0')
 
   ensureColumn('quotations', 'subtotal', 'REAL NOT NULL DEFAULT 0')
   ensureColumn('quotations', 'discount', 'REAL NOT NULL DEFAULT 0')

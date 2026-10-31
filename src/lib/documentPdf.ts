@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { amountInWords } from './format'
+import { BUSINESS_NAME } from './share'
 
 export interface PdfDocumentLine {
   name?: string
@@ -19,6 +20,10 @@ export interface PdfDocument {
   partyName: string
   partyAddress?: string
   partyPhone?: string
+  partyContact?: string
+  partyEmail?: string
+  /** Heading used for the details block and number label, e.g. 'Invoice'. Defaults to the title. */
+  detailsLabel?: string
   reference?: string
   lines: PdfDocumentLine[]
   subtotal: number
@@ -27,223 +32,259 @@ export interface PdfDocument {
   loadingAmount?: number
   unloadingAmount?: number
   freightAmount?: number
+  extraCharges?: number
+  paymentMode?: string
+  amountReceived?: number
   totalKg?: number
   total: number
   note?: string
   unitTotals?: { name: string; qty: number; unit: string; amount: number }[]
 }
 
-const money = (value: number) => `INR ${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const number2 = (value: number) => Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const money = (value: number) => `INR ${number2(value)}`
 
 export function createDocumentPdf(data: PdfDocument): File {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageWidth = pdf.internal.pageSize.getWidth()
   const pageHeight = pdf.internal.pageSize.getHeight()
-  const left = 14
-  const right = pageWidth - 14
+  const left = 10
+  const right = pageWidth - 10
+  const width = right - left
+  const half = width / 2
+  const pad = 3
+  const bottomLimit = pageHeight - 12
+  const navy: [number, number, number] = [30, 58, 95]
+  const slate: [number, number, number] = [30, 41, 59]
+  const rule: [number, number, number] = [203, 213, 225]
+  const tint: [number, number, number] = [234, 241, 248]
+  const detailsLabel = data.detailsLabel || data.title
+  let y = 12
 
-  // Header section with business details
-  pdf.setFillColor(30, 58, 95)
-  pdf.roundedRect(left, 14, pageWidth - left * 2, 28, 2, 2, 'F')
+  const hLine = (at: number) => {
+    pdf.setDrawColor(...rule)
+    pdf.setLineWidth(0.2)
+    pdf.line(left, at, right, at)
+  }
+  const ensureSpace = (height: number) => {
+    if (y + height <= bottomLimit) return
+    pdf.addPage()
+    y = 14
+  }
+  const sectionTitle = (text: string, x: number, at: number) => {
+    pdf.setTextColor(...navy)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(9.5)
+    pdf.text(text.toUpperCase(), x, at)
+  }
+  // Draws "Label: value" rows with wrapped values and returns the y below the last row.
+  const drawFields = (rows: [string, string][], x: number, labelWidth: number, startY: number, valueWidth: number) => {
+    let cy = startY
+    pdf.setFontSize(9)
+    for (const [label, value] of rows) {
+      pdf.setTextColor(...slate)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text(label, x, cy)
+      pdf.setFont('helvetica', 'normal')
+      const lines: string[] = pdf.splitTextToSize(value || '-', valueWidth)
+      pdf.text(lines, x + labelWidth, cy)
+      cy += lines.length * 4.2 + 1.2
+    }
+    return cy
+  }
+
+  // Header block: business name and contact details
+  const headerHeight = 31
+  pdf.setFillColor(...navy)
+  pdf.rect(left, y, width, headerHeight, 'F')
   pdf.setTextColor(255, 255, 255)
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(16)
-  pdf.text('KRISHNA STEEL CORPORATION', pageWidth / 2, 22, { align: 'center' })
-  pdf.setFontSize(9)
+  pdf.setFontSize(18)
+  pdf.text(BUSINESS_NAME.toUpperCase(), pageWidth / 2, y + 9.5, { align: 'center' })
   pdf.setFont('helvetica', 'normal')
-  pdf.text('250/1/2, Near Gokul Hotel, Karad Road, Vita, Tal-Khanapur, Dist-Sangli, Maharashtra', pageWidth / 2, 27, { align: 'center' })
-  pdf.text('State: Maharashtra | Contact: 8329531313 / 9421120822 | E-Mail: krishnasteelcorporation03@gmail.com', pageWidth / 2, 32, { align: 'center' })
+  pdf.setFontSize(8.5)
+  pdf.setTextColor(226, 232, 240)
+  pdf.text('250/1/2, Near Gokul Hotel, Karad Road, Vita,', pageWidth / 2, y + 15, { align: 'center' })
+  pdf.text('Tal-Khanapur, Dist-Sangli, Maharashtra', pageWidth / 2, y + 19, { align: 'center' })
+  pdf.text('State: Maharashtra', pageWidth / 2, y + 23.5, { align: 'center' })
+  pdf.text('Contact: 9975981103 / 9421120822 | E-Mail: krishnasteelcorporation03@gmail.com', pageWidth / 2, y + 27.5, { align: 'center' })
+  y += headerHeight
 
-  // Document title
-  pdf.setFillColor(234, 241, 248)
-  pdf.rect(left, 45, pageWidth - left * 2, 8, 'F')
-  pdf.setTextColor(30, 58, 95)
+  // Document title bar
+  pdf.setFillColor(...tint)
+  pdf.rect(left, y, width, 9, 'F')
+  hLine(y + 9)
+  pdf.setTextColor(...navy)
   pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(12)
-  pdf.text(data.title.toUpperCase(), pageWidth / 2, 51, { align: 'center' })
+  pdf.setFontSize(13)
+  pdf.text(data.title.toUpperCase(), pageWidth / 2, y + 6.4, { align: 'center' })
+  y += 9
 
-  // Details grid
-  pdf.setTextColor(30, 58, 95)
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(10)
-  const detailsStart = 58
-  pdf.text(`${data.title} Details`, left, detailsStart)
-  pdf.text(`${data.partyLabel} (Bill to)`, left + (pageWidth - left * 2) / 2, detailsStart)
-
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9)
-  const detailLeft = left
-  const detailRight = left + (pageWidth - left * 2) / 2
-  const rowHeight = 4.5
-
-  // Left column - document details
-  pdf.text(`${data.title} No.: ${data.number}`, detailLeft, detailsStart + rowHeight)
-  pdf.text(`Dated: ${data.date}`, detailLeft, detailsStart + rowHeight * 2)
-  pdf.text('Delivery Note: -', detailLeft, detailsStart + rowHeight * 3)
-  pdf.text('Mode/Terms of Payment: -', detailLeft, detailsStart + rowHeight * 4)
-  pdf.text(`${data.partyLabel}'s Order No.: -`, detailLeft, detailsStart + rowHeight * 5)
-  pdf.text('Dated: -', detailLeft, detailsStart + rowHeight * 6)
-  pdf.text('Dispatch Doc No.: -', detailLeft, detailsStart + rowHeight * 7)
-  pdf.text('Delivery Note Date: -', detailLeft, detailsStart + rowHeight * 8)
-
-  // Right column - party details
-  pdf.text(`Name: ${data.partyName || '-'}`, detailRight, detailsStart + rowHeight)
-  pdf.text(`Address: ${data.partyAddress || '-'}`, detailRight, detailsStart + rowHeight * 2)
-  pdf.text(`Contact Person: -`, detailRight, detailsStart + rowHeight * 3)
-  pdf.text(`Phone: ${data.partyPhone || '-'}`, detailRight, detailsStart + rowHeight * 4)
-  pdf.text(`Email: -`, detailRight, detailsStart + rowHeight * 5)
-
-  // Vertical divider line
-  pdf.setDrawColor(203, 213, 225)
+  // Details grid: document on the left, party on the right
+  const detailsTop = y
+  sectionTitle(`${detailsLabel} Details`, left + pad, y + 6)
+  sectionTitle(`${data.partyLabel} (Bill to)`, left + half + pad, y + 6)
+  const leftEnd = drawFields([
+    [`${detailsLabel} No.:`, data.number],
+    ['Dated:', data.date],
+    ['Delivery Note:', '-'],
+    ['Mode/Terms of Payment:', data.paymentMode || '-'],
+  ], left + pad, 40, y + 12, half - pad * 2 - 40)
+  const rightEnd = drawFields([
+    ['Name:', data.partyName],
+    ['Address:', data.partyAddress || ''],
+    ['Contact Person:', data.partyContact || ''],
+    ['Phone:', data.partyPhone || ''],
+    ['Email:', data.partyEmail || ''],
+  ], left + half + pad, 28, y + 12, half - pad * 2 - 28)
+  y = Math.max(leftEnd, rightEnd) + 1
+  pdf.setDrawColor(...rule)
   pdf.setLineWidth(0.2)
-  pdf.line(left + (pageWidth - left * 2) / 2, detailsStart - 2, left + (pageWidth - left * 2) / 2, detailsStart + rowHeight * 8 + 2)
-
-  // Horizontal divider line
-  pdf.line(left, detailsStart + rowHeight * 8 + 4, right, detailsStart + rowHeight * 8 + 4)
+  pdf.line(left + half, detailsTop, left + half, y)
+  hLine(y)
 
   // Items table
-  const tableStart = detailsStart + rowHeight * 8 + 10
   autoTable(pdf, {
-    startY: tableStart,
-    margin: { left, right: pageWidth - right, top: 27, bottom: 70 },
+    startY: y,
+    theme: 'grid',
+    margin: { left, right: pageWidth - right, top: 14, bottom: 14 },
     head: [['SI', 'Description of Goods', 'Quantity', 'Rate', 'Unit', 'Amount']],
     body: data.lines.map((line, index) => [
       String(index + 1),
       line.name || '-',
-      `${Number(line.qty || 0).toLocaleString('en-IN')}`,
+      number2(line.qty),
       money(line.rate),
       line.unit || '-',
       money(line.amount),
     ]),
-    styles: { font: 'helvetica', fontSize: 9, cellPadding: 3, textColor: [30, 41, 59], lineColor: [203, 213, 225], lineWidth: 0.2 },
-    headStyles: { fillColor: [234, 241, 248], textColor: [30, 58, 95], fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 2, textColor: slate, lineColor: rule, lineWidth: 0.2 },
+    headStyles: { fillColor: tint, textColor: navy, fontStyle: 'bold', halign: 'center' },
     columnStyles: {
       0: { cellWidth: 10, halign: 'center' },
       1: { cellWidth: 'auto' },
-      2: { cellWidth: 25, halign: 'right' },
-      3: { cellWidth: 25, halign: 'right' },
-      4: { cellWidth: 15, halign: 'center' },
-      5: { cellWidth: 30, halign: 'right' },
-    },
-    didDrawPage: (hook) => {
-      if (hook.pageNumber > 1) {
-        pdf.setTextColor(30, 58, 95)
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(9)
-        pdf.text(`${data.title} - ${data.number}`, left, 16)
-      }
+      2: { cellWidth: 26, halign: 'right' },
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 14, halign: 'center' },
+      5: { cellWidth: 32, halign: 'right' },
     },
   })
+  y = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y
 
-  const lastTableY = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? tableStart
-
-  // Unit totals section
-  let unitTotalsY = lastTableY + 5
+  // Unit totals box
   if (data.unitTotals && data.unitTotals.length > 0) {
-    pdf.setDrawColor(203, 213, 225)
-    pdf.line(left, unitTotalsY - 3, right, unitTotalsY - 3)
+    const entryHeight = 9
+    const boxHeight = 8 + data.unitTotals.length * entryHeight
+    const boxWidth = width * 0.55
+    y += 4
+    ensureSpace(boxHeight)
+    pdf.setFillColor(248, 250, 252)
     pdf.setDrawColor(147, 169, 194)
     pdf.setLineWidth(0.2)
-    const unitTotalsHeight = 10 + data.unitTotals.length * 6
-    pdf.rect(left, unitTotalsY, pageWidth - left * 2, unitTotalsHeight)
-
-    pdf.setFont('helvetica', 'bold')
-    pdf.setFontSize(9)
-    pdf.setTextColor(30, 58, 95)
-    pdf.text('Unit Totals', left + 3, unitTotalsY + 5)
-
-    pdf.setFont('helvetica', 'normal')
-    pdf.setFontSize(8)
+    pdf.rect(left + pad, y, boxWidth, boxHeight, 'FD')
+    sectionTitle('Unit Totals', left + pad + 2, y + 5)
     data.unitTotals.forEach((unitTotal, index) => {
-      const y = unitTotalsY + 10 + index * 6
-      pdf.text(`${unitTotal.name}:`, left + 3, y)
-      pdf.text(`${Number(unitTotal.qty).toLocaleString('en-IN')} ${unitTotal.unit}`, left + 80, y)
-      pdf.text(money(unitTotal.amount), right, y, { align: 'right' })
+      const top = y + 8 + index * entryHeight
+      pdf.setDrawColor(...rule)
+      pdf.line(left + pad + 2, top + entryHeight - 1, left + pad + boxWidth - 2, top + entryHeight - 1)
+      pdf.setTextColor(...slate)
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(8.5)
+      pdf.text(`Unit Total: ${unitTotal.name}`, left + pad + 2, top + 2.5)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`${number2(unitTotal.qty)} ${unitTotal.unit}`, left + pad + 2, top + 6.5)
+      pdf.text(money(unitTotal.amount), left + pad + boxWidth - 2, top + 6.5, { align: 'right' })
     })
-
-    unitTotalsY += unitTotalsHeight + 5
+    y += boxHeight
   }
 
-  // Summary section
-  const summaryStart = unitTotalsY + 3
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9)
-  pdf.setTextColor(30, 41, 59)
-
-  const summaryRows = [
-    ['Subtotal:', money(data.subtotal)],
-    ['Loading Amount:', money(data.loadingAmount || 0)],
-    ['Unloading Amount:', money(data.unloadingAmount || 0)],
-    ['Freight Amount:', money(data.freightAmount || 0)],
-    ['Discount:', money(data.discount || 0)],
-    ['Total:', money(data.total)],
+  // Summary rows: label on the left, value on the right
+  const summary: { label: string; value: string; bold?: boolean; gapBefore?: number; underline?: boolean }[] = [
+    { label: 'Subtotal:', value: money(data.subtotal) },
+    { label: 'Loading Amount:', value: money(data.loadingAmount || 0) },
+    { label: 'Unloading Amount:', value: money(data.unloadingAmount || 0) },
+    { label: 'Freight Amount:', value: money(data.freightAmount || 0) },
+    { label: 'Discount:', value: money(data.discount || 0) },
+    { label: 'Extra Charges:', value: money(data.extraCharges || 0) },
+    { label: 'Total:', value: money(data.total), bold: true, gapBefore: 4, underline: true },
   ]
-
-  summaryRows.forEach(([label, value], index) => {
-    const y = summaryStart + index * 5
-    const isTotal = label === 'Total:'
-    pdf.setFont('helvetica', isTotal ? 'bold' : 'normal')
-    pdf.text(label, right - 40, y)
-    pdf.text(value, right, y, { align: 'right' })
-  })
-
-  pdf.setFont('helvetica', 'italic')
-  pdf.setFontSize(8)
-  pdf.text('E. & O.E', right - 40, summaryStart + summaryRows.length * 5 + 3)
+  if (data.amountReceived !== undefined) {
+    summary.push(
+      { label: 'Amount Received:', value: money(data.amountReceived), gapBefore: 3 },
+      { label: 'Balance Amount:', value: money(data.total - data.amountReceived), bold: true },
+    )
+  }
+  const summaryHeight = pad * 2 + summary.reduce((sum, row) => sum + 5 + (row.gapBefore || 0), 0)
+  y += 4
+  ensureSpace(summaryHeight)
+  hLine(y)
+  let rowY = y + pad + 2
+  for (const row of summary) {
+    rowY += row.gapBefore || 0
+    pdf.setTextColor(...slate)
+    pdf.setFont('helvetica', row.bold ? 'bold' : 'normal')
+    pdf.setFontSize(9)
+    pdf.text(row.label, left + pad, rowY)
+    pdf.text(row.value, right - pad, rowY, { align: 'right' })
+    if (row.underline) {
+      pdf.setDrawColor(...navy)
+      pdf.setLineWidth(0.3)
+      pdf.line(left + pad, rowY + 1.6, right - pad, rowY + 1.6)
+    }
+    rowY += 5
+  }
+  y += summaryHeight
+  hLine(y)
 
   // Amount in words
-  const amountWordsY = summaryStart + summaryRows.length * 5 + 10
-  pdf.setDrawColor(203, 213, 225)
-  pdf.line(left, amountWordsY - 3, right, amountWordsY - 3)
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(9)
+  const wordsLabel = 'Amount Chargeable (in words):'
   pdf.setFont('helvetica', 'bold')
-  pdf.text('Amount Chargeable (in words):', left, amountWordsY)
+  pdf.setFontSize(9)
+  const wordsLabelWidth = pdf.getTextWidth(wordsLabel) + 2
   pdf.setFont('helvetica', 'italic')
-  pdf.text(amountInWords(data.total), left + 65, amountWordsY)
+  const wordsLines: string[] = pdf.splitTextToSize(amountInWords(data.total), width - pad * 2 - wordsLabelWidth)
+  const wordsHeight = Math.max(1, wordsLines.length) * 4.2 + 5
+  ensureSpace(wordsHeight)
+  pdf.setTextColor(71, 85, 105)
+  pdf.text(wordsLines, left + pad + wordsLabelWidth, y + 5)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text(wordsLabel, left + pad, y + 5)
+  y += wordsHeight
+  hLine(y)
 
   // Bank details
-  const bankDetailsY = amountWordsY + 10
-  pdf.setDrawColor(203, 213, 225)
-  pdf.line(left, bankDetailsY - 3, right, bankDetailsY - 3)
+  ensureSpace(26)
+  sectionTitle('Bank Details', left + pad, y + 6)
+  drawFields([
+    ['Bank Name:', 'Axis Bank'],
+    ['A/c No.:', '922030050546660'],
+    ['Branch & IFS Code:', 'Vita - UTIB0002839'],
+  ], left + pad, 38, y + 11, width - pad * 2 - 38)
+  y += 25
+  hLine(y)
+
+  // Footer: declaration and signature, then the computer-generated note
+  const footerHeight = 30
+  ensureSpace(footerHeight + 10)
+  pdf.setDrawColor(...rule)
+  pdf.line(left + half, y, left + half, y + footerHeight)
+  pdf.setTextColor(...slate)
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
-  pdf.text('Bank Details', left, bankDetailsY + 3)
+  pdf.text('Declaration', left + pad, y + 6)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(8)
-  pdf.text('Bank Name: Axis Bank', left, bankDetailsY + 8)
-  pdf.text('A/c No.: 922030050546660', left, bankDetailsY + 13)
-  pdf.text('Branch & IFS Code: Vita - UTIB0002839', left, bankDetailsY + 18)
-
-  // Footer with declaration and signature
-  const footerY = bankDetailsY + 28
-  pdf.setDrawColor(203, 213, 225)
-  pdf.line(left, footerY - 3, right, footerY - 3)
-
-  // Declaration
+  pdf.text('We declare that this Invoice shows the actual price of the goods described and that all particulars are true and correct.', left + pad, y + 11, { maxWidth: half - pad * 2 })
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(9)
-  pdf.text('Declaration', left, footerY + 3)
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(8)
-  pdf.text('We declare that this Invoice shows the actual price of the goods described and that all particulars are true and correct.', left, footerY + 8, { maxWidth: (pageWidth - left * 2) / 2 - 5 })
-
-  // Signature
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
-  pdf.text('for Krishna Steel Corporation', right, footerY + 8, { align: 'right' })
-  pdf.text('Authorised Signatory', right, footerY + 20, { align: 'right' })
-
-  // Computer generated note
-  const noteY = footerY + 30
-  pdf.setDrawColor(203, 213, 225)
-  pdf.line(left, noteY - 3, right, noteY - 3)
+  pdf.text(`for ${BUSINESS_NAME}`, right - pad, y + 6, { align: 'right' })
+  pdf.text('Authorised Signatory', right - pad, y + footerHeight - 4, { align: 'right' })
+  y += footerHeight
+  hLine(y)
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(9)
-  pdf.text('This is a Computer Generated Invoice', pageWidth / 2, noteY + 5, { align: 'center' })
+  pdf.text('This is a Computer Generated Invoice', pageWidth / 2, y + 6, { align: 'center' })
 
-  // Border around page
+  // Border around every page, as in the printed copy
   const pageCount = pdf.getNumberOfPages()
   for (let page = 1; page <= pageCount; page += 1) {
     pdf.setPage(page)
