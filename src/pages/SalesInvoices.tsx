@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { amountInWords, fmtDate, fmtDateTime, inr2, itemUnitTotals, qty2, todayISO, unitTotals } from '@/lib/format'
+import { amountInWords, fmtDate, fmtDateTime, inr2, qty2, todayISO, unitTotals } from '@/lib/format'
 import { COPYRIGHT } from '@/lib/copyright'
 import { PAYMENT_MODES, paymentModeLabel } from '@/lib/paymentModes'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
@@ -68,7 +68,6 @@ export default function SalesInvoices() {
       return
     }
 
-    const totalsByItem = itemUnitTotals(fullInvoice.lines || [])
     const customerName = fullInvoice.customer_name || invoice.customer_name || '-'
     const customerAddress = fullInvoice.address || invoice.address || '-'
     const customerContact = fullInvoice.contact_person || invoice.contact_person || '-'
@@ -153,18 +152,6 @@ export default function SalesInvoices() {
             padding: 8px;
             border-bottom: 1px solid #cbd5e1;
           }
-          .unit-totals {
-            border: 1px solid #93a9c2;
-            margin-top: 6px;
-            padding: 5px;
-            width: 45%;
-            background: #f8fafc;
-          }
-          .unit-totals .section-title { margin: 0 0 4px; }
-          .unit-total-list { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
-          .unit-total-item { min-width: 0; padding: 3px 2px; border-bottom: 1px solid #cbd5e1; }
-          .unit-total-name { font-weight: bold; overflow-wrap: anywhere; }
-          .unit-total-values { display: flex; justify-content: space-between; gap: 4px; margin-top: 2px; white-space: nowrap; }
           .summary-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
           .summary-row strong, .summary-row:last-of-type { color: #1e3a5f; }
           .amount-words {
@@ -206,10 +193,9 @@ export default function SalesInvoices() {
           }
           @media print {
             body { padding: 0; }
-            .header, .invoice-title, .details-grid, .unit-total-item, .summary-section, .amount-words, .bank-details, .footer, tr { break-inside: avoid; }
+            .header, .invoice-title, .details-grid, .summary-section, .amount-words, .bank-details, .footer, tr { break-inside: avoid; }
             thead { display: table-header-group; }
             tfoot { display: table-footer-group; }
-            .unit-total-list { display: block; }
             * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           }
         </style>
@@ -273,21 +259,6 @@ export default function SalesInvoices() {
             </tbody>
           </table>
 
-          <div class="unit-totals">
-            <div class="section-title">Unit Totals</div>
-            <div class="unit-total-list">
-              ${totalsByItem.map((t) => `
-                <div class="unit-total-item">
-                  <div class="unit-total-name">Unit Total: ${t.name}</div>
-                  <div class="unit-total-values">
-                    <span>${qty2(t.qty)} ${t.unit}</span>
-                    <span>${inr2(t.amount)}</span>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
           <div class="summary-section">
             <div class="summary-row"><span>Subtotal:</span><span>${inr2(invoice.subtotal)}</span></div>
             <div class="summary-row"><span>Loading Amount:</span><span>${inr2(invoice.loading_amount)}</span></div>
@@ -344,7 +315,6 @@ export default function SalesInvoices() {
       const fullInvoice = await api.getSalesInvoice(invoice.id)
       const customerName = fullInvoice.customer_name || invoice.customer_name || 'Customer'
       const phone = fullInvoice.phone || invoice.phone
-      const totalsByItem = itemUnitTotals(fullInvoice.lines || [])
       const message = [
         `Hello ${customerName},`,
         '',
@@ -386,7 +356,6 @@ export default function SalesInvoices() {
         totalKg: fullInvoice.total_kg,
         total: fullInvoice.total,
         note: fullInvoice.note,
-        unitTotals: totalsByItem,
       })
       if (!(await savePdfFile(file))) return
       const url = whatsappShareUrl({ phone }, message)

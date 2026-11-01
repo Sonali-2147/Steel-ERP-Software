@@ -5,7 +5,7 @@ import {
   Badge, Button, Card, ConfirmDialog, EmptyRow, Field, Input, Modal, PageHeader, SearchBox, SearchSelect, Select, Table, Td, Textarea, Th, Tr, cx,
 } from '@/components/ui'
 import { api } from '@/lib/api'
-import { fmtDate, fmtDateTime, inr, itemUnitTotals, qty, todayISO } from '@/lib/format'
+import { fmtDate, fmtDateTime, inr, qty, todayISO } from '@/lib/format'
 import { BUSINESS_NAME, BUSINESS_PHONE, whatsappShareUrl } from '@/lib/share'
 import { createDocumentPdf, openExternalUrl, savePdfFile } from '@/lib/documentPdf'
 import { WhatsAppIcon } from '@/components/WhatsAppIcon'
@@ -220,7 +220,6 @@ export default function Quotations() {
     try {
       const fullQuotation = await api.getQuotation(quotation.id)
       const recipientName = fullQuotation.supplier_name || quotation.supplier_name || 'Customer'
-      const totalsByItem = itemUnitTotals(fullQuotation.lines || [])
       const message = [
         `Hello ${recipientName},`,
         '',
@@ -257,7 +256,6 @@ export default function Quotations() {
         totalKg: fullQuotation.total_kg,
         total: fullQuotation.total,
         note: fullQuotation.note,
-        unitTotals: totalsByItem,
       })
       if (!(await savePdfFile(file))) return
       const url = whatsappShareUrl({ phone: fullQuotation.phone }, message)

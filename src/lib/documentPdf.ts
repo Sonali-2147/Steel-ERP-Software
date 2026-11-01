@@ -41,7 +41,6 @@ export interface PdfDocument {
   totalKg?: number
   total: number
   note?: string
-  unitTotals?: { name: string; qty: number; unit: string; amount: number }[]
 }
 
 const number2 = (value: number) => Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -172,33 +171,6 @@ export function createDocumentPdf(data: PdfDocument): File {
     },
   })
   y = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y
-
-  // Unit totals box
-  if (data.unitTotals && data.unitTotals.length > 0) {
-    const entryHeight = 9
-    const boxHeight = 8 + data.unitTotals.length * entryHeight
-    const boxWidth = width * 0.55
-    y += 4
-    ensureSpace(boxHeight)
-    pdf.setFillColor(248, 250, 252)
-    pdf.setDrawColor(147, 169, 194)
-    pdf.setLineWidth(0.2)
-    pdf.rect(left + pad, y, boxWidth, boxHeight, 'FD')
-    sectionTitle('Unit Totals', left + pad + 2, y + 5)
-    data.unitTotals.forEach((unitTotal, index) => {
-      const top = y + 8 + index * entryHeight
-      pdf.setDrawColor(...rule)
-      pdf.line(left + pad + 2, top + entryHeight - 1, left + pad + boxWidth - 2, top + entryHeight - 1)
-      pdf.setTextColor(...slate)
-      pdf.setFont('helvetica', 'bold')
-      pdf.setFontSize(8.5)
-      pdf.text(`Unit Total: ${unitTotal.name}`, left + pad + 2, top + 2.5)
-      pdf.setFont('helvetica', 'normal')
-      pdf.text(`${number2(unitTotal.qty)} ${unitTotal.unit}`, left + pad + 2, top + 6.5)
-      pdf.text(money(unitTotal.amount), left + pad + boxWidth - 2, top + 6.5, { align: 'right' })
-    })
-    y += boxHeight
-  }
 
   // Summary rows: label on the left, value on the right
   const summary: { label: string; value: string; bold?: boolean; gapBefore?: number; underline?: boolean }[] = [

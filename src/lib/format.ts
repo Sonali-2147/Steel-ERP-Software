@@ -36,25 +36,6 @@ export function unitTotals(lines: Array<{ unit?: string; name?: string; qty: num
   return [...totals.values()].sort((a, b) => a.unit.localeCompare(b.unit))
 }
 
-export function itemUnitTotals(lines: Array<{ unit?: string; name?: string; qty: number; amount: number }>): Array<{
-  name: string
-  unit: string
-  qty: number
-  amount: number
-}> {
-  const totals = new Map<string, { name: string; unit: string; qty: number; amount: number }>()
-  for (const line of lines) {
-    const name = line.name?.trim() || 'Item'
-    const unit = line.unit?.trim() || '-'
-    const key = `${name.toLowerCase()}\0${unit.toLowerCase()}`
-    const total = totals.get(key) || { name, unit, qty: 0, amount: 0 }
-    total.qty += line.qty
-    total.amount += line.amount
-    totals.set(key, total)
-  }
-  return [...totals.values()]
-}
-
 const IST_TIMEZONE = 'Asia/Kolkata'
 
 const parseDateForDisplay = (iso: string) => {
